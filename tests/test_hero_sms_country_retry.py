@@ -14,6 +14,10 @@ sys.modules.setdefault(
         set_sys_kv=lambda *args, **kwargs: None,
     ),
 )
+sys.modules.setdefault(
+    "utils.auth_core",
+    types.SimpleNamespace(generate_payload=lambda *args, **kwargs: ""),
+)
 
 from utils.integrations.hero_sms import _try_verify_phone_via_hero_sms
 
