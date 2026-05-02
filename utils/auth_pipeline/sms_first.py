@@ -124,7 +124,7 @@ def _log_openai_phone_otp_channel(resp: Any) -> str:
     return channel
 
 
-def _buy_sms_number(proxies: Any) -> tuple[str, str, str, str]:
+def _buy_sms_number(proxies: Any) -> tuple[str, str, str, str, dict]:
     if getattr(cfg, "SMSBOWER_ENABLED", False):
         from utils.integrations.smsbower_sms import (
             _smsbower_get_number,
@@ -143,13 +143,14 @@ def _buy_sms_number(proxies: Any) -> tuple[str, str, str, str]:
                 exclude_country_ids=excluded,
                 force_refresh=attempt > 1,
             )
-            aid, phone, err, cost = _smsbower_get_number(proxies, service_code=service, country_id=country)
+            aid, phone, err, cost, meta = _smsbower_get_number(proxies, service_code=service, country_id=country)
             if aid and phone:
-                print(f"[{cfg.ts()}] [SMS-FIRST] SmsBower 取号成功: {phone} (订单 {aid}, 费用 {cost or '未知'})")
-                return "smsbower", aid, phone, ""
+                provider_label = meta.get("sms_provider_name") or meta.get("sms_provider_id") or "未知"
+                print(f"[{cfg.ts()}] [SMS-FIRST] SmsBower 取号成功: {phone} (订单 {aid}, 费用 {cost or '未知'}, 供货商 {provider_label})")
+                return "smsbower", aid, phone, "", meta
             print(f"[{cfg.ts()}] [WARNING] [SMS-FIRST] SmsBower 第 {attempt} 次取号失败: {err}")
             excluded.add(country)
-        return "smsbower", "", "", "SmsBower 取号失败"
+        return "smsbower", "", "", "SmsBower 取号失败", {}
 
     if getattr(cfg, "HERO_SMS_ENABLED", False):
         from utils.integrations.hero_sms import (
@@ -175,10 +176,10 @@ def _buy_sms_number(proxies: Any) -> tuple[str, str, str, str]:
             aid, phone, err = _hero_sms_get_number(proxies, service_code=service, country_id=country)
             if aid and phone:
                 print(f"[{cfg.ts()}] [SMS-FIRST] HeroSMS 取号成功: {phone} (订单 {aid})")
-                return "hero_sms", aid, phone, ""
+                return "hero_sms", aid, phone, "", {"sms_service": service, "sms_country_id": country}
             print(f"[{cfg.ts()}] [WARNING] [SMS-FIRST] HeroSMS 第 {attempt} 次取号失败: {err}")
             excluded.add(country)
-        return "hero_sms", "", "", "HeroSMS 取号失败"
+        return "hero_sms", "", "", "HeroSMS 取号失败", {}
 
     if getattr(cfg, "FIVESIM_ENABLED", False):
         from utils.integrations.fivesim_sms import _fivesim_get_number, _fivesim_max_tries, _fivesim_pick_country
@@ -191,12 +192,12 @@ def _buy_sms_number(proxies: Any) -> tuple[str, str, str, str]:
             aid, phone, err, cost = _fivesim_get_number(proxies, service, country, enable_reuse=False)
             if aid and phone:
                 print(f"[{cfg.ts()}] [SMS-FIRST] 5SIM 取号成功: {phone} (订单 {aid}, 费用 {cost})")
-                return "fivesim", aid, phone, ""
+                return "fivesim", aid, phone, "", {"sms_service": service, "sms_country_id": country, "sms_cost": cost}
             print(f"[{cfg.ts()}] [WARNING] [SMS-FIRST] 5SIM 第 {attempt} 次取号失败: {err}")
             excluded.add(country)
-        return "fivesim", "", "", "5SIM 取号失败"
+        return "fivesim", "", "", "5SIM 取号失败", {}
 
-    return "", "", "", "未开启任何 SMS 供应商"
+    return "", "", "", "未开启任何 SMS 供应商", {}
 
 
 def _mark_ready(provider: str, activation_id: str, proxies: Any) -> None:
@@ -552,6 +553,7 @@ def run_sms_first(proxy: Optional[str], run_ctx: dict = None) -> tuple:
     email = ""
     email_jwt = ""
     password = ""
+    sms_meta: dict = {}
     processed_mails: set = set()
     session = None
     order_finished = False
@@ -563,7 +565,7 @@ def run_sms_first(proxy: Optional[str], run_ctx: dict = None) -> tuple:
         if not _network_check(session, proxies):
             return None, None
 
-        sms_provider, activation_id, phone, err = _buy_sms_number(side_proxies)
+        sms_provider, activation_id, phone, err, sms_meta = _buy_sms_number(side_proxies)
         if not activation_id or not phone:
             print(f"[{cfg.ts()}] [ERROR] [SMS-FIRST] {err}")
             if run_ctx is not None:
@@ -583,9 +585,13 @@ def run_sms_first(proxy: Optional[str], run_ctx: dict = None) -> tuple:
             activation_id=activation_id,
             phone=phone,
             password=password,
+            extra=sms_meta or None,
         )
 
         def _debug_fail(stage: str, error: str, extra: dict = None) -> None:
+            merged_extra = dict(sms_meta or {})
+            if extra:
+                merged_extra.update(extra)
             _write_sms_first_debug_event(
                 stage=stage,
                 status="failed",
@@ -594,7 +600,7 @@ def run_sms_first(proxy: Optional[str], run_ctx: dict = None) -> tuple:
                 phone=phone,
                 password=password,
                 error=error,
-                extra=extra,
+                extra=merged_extra or None,
             )
 
         print(f"[{cfg.ts()}] [SMS-FIRST] 第一段使用 ChatGPT 网页端会话创建手机号账号...")
@@ -840,6 +846,7 @@ def run_sms_first(proxy: Optional[str], run_ctx: dict = None) -> tuple:
             activation_id=activation_id,
             phone=phone,
             password=password,
+            extra=sms_meta or None,
         )
         print(f"[{cfg.ts()}] [SUCCESS] [SMS-FIRST] 手机号注册并换取 RT 成功: {phone}")
         return json.dumps(token_data, ensure_ascii=False, separators=(",", ":")), password
@@ -853,6 +860,7 @@ def run_sms_first(proxy: Optional[str], run_ctx: dict = None) -> tuple:
                 phone=phone,
                 password=password,
                 error=str(e),
+                extra=sms_meta or None,
             )
         print(f"[{cfg.ts()}] [ERROR] [SMS-FIRST] 流程异常: {e}")
         return None, None

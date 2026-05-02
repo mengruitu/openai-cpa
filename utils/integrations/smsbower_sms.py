@@ -466,9 +466,39 @@ def _smsbower_set_status(activation_id: str, status: int, proxies: Any) -> str:
     return str(text or "")
 
 
-def _smsbower_get_number(proxies: Any, *, service_code: str, country_id: int) -> tuple[str, str, str, str]:
+def _smsbower_number_meta(data: Any, *, service_code: str, country_id: int,
+                          provider_ids: str = "", except_provider_ids: str = "") -> dict[str, Any]:
+    meta: dict[str, Any] = {
+        "sms_service": service_code,
+        "sms_country_id": country_id,
+        "requested_provider_ids": provider_ids,
+        "requested_except_provider_ids": except_provider_ids,
+    }
+    if not isinstance(data, dict):
+        return meta
+    for source_key, target_key in (
+            ("providerId", "sms_provider_id"),
+            ("provider_id", "sms_provider_id"),
+            ("providerID", "sms_provider_id"),
+            ("provider", "sms_provider_id"),
+            ("providerName", "sms_provider_name"),
+            ("provider_name", "sms_provider_name"),
+            ("operator", "sms_provider_name"),
+            ("operatorName", "sms_provider_name"),
+            ("country", "sms_country"),
+            ("countryId", "sms_country_id"),
+            ("activationCost", "sms_cost"),
+            ("cost", "sms_cost"),
+    ):
+        value = data.get(source_key)
+        if value not in (None, ""):
+            meta[target_key] = value
+    return meta
+
+
+def _smsbower_get_number(proxies: Any, *, service_code: str, country_id: int) -> tuple[str, str, str, str, dict[str, Any]]:
     if country_id in _OPENAI_SMS_BLOCKED_COUNTRY_IDS:
-        return "", "", f"COUNTRY_BLOCKED: 国家ID {country_id} 被拉黑", ""
+        return "", "", f"COUNTRY_BLOCKED: 国家ID {country_id} 被拉黑", "", {}
 
     limit_max = _smsbower_order_max_price()
     limit_min = _smsbower_order_min_price()
@@ -482,9 +512,9 @@ def _smsbower_get_number(proxies: Any, *, service_code: str, country_id: int) ->
 
         if actual_cost > 0:
             if limit_max > 0 and actual_cost > limit_max:
-                return "", "", f"价格拦截: 该国当前价格 ({actual_cost}$) 高于您的最高限价 ({limit_max}$)", ""
+                return "", "", f"价格拦截: 该国当前价格 ({actual_cost}$) 高于您的最高限价 ({limit_max}$)", "", {}
             if limit_min > 0 and actual_cost < limit_min:
-                return "", "", f"价格拦截: 该国当前价格 ({actual_cost}$) 低于您的最低限价 ({limit_min}$)", ""
+                return "", "", f"价格拦截: 该国当前价格 ({actual_cost}$) 低于您的最低限价 ({limit_min}$)", "", {}
 
     params = {"service": service_code, "country": country_id}
     if _smsbower_order_max_price() > 0: params["maxPrice"] = _smsbower_order_max_price()
@@ -494,6 +524,13 @@ def _smsbower_get_number(proxies: Any, *, service_code: str, country_id: int) ->
     if provider_ids: params["providerIds"] = provider_ids
     if except_provider_ids: params["exceptProviderIds"] = except_provider_ids
     ok, text, data = _smsbower_request("getNumberV2", proxies=proxies, params=params, timeout=30)
+    meta = _smsbower_number_meta(
+        data,
+        service_code=service_code,
+        country_id=country_id,
+        provider_ids=provider_ids,
+        except_provider_ids=except_provider_ids,
+    )
 
     if ok and isinstance(data, dict):
         aid = str(data.get("activationId", ""))
@@ -502,15 +539,15 @@ def _smsbower_get_number(proxies: Any, *, service_code: str, country_id: int) ->
 
         if aid and phone_raw:
             phone = phone_raw if phone_raw.startswith("+") else f"+{phone_raw}"
-            return aid, phone, "", cost
+            return aid, phone, "", cost, meta
 
     elif ok and str(text).upper().startswith("ACCESS_NUMBER:"):
         parts = text.split(":", 2)
         if len(parts) >= 3:
             phone = parts[2].strip() if parts[2].strip().startswith("+") else f"+{parts[2].strip()}"
-            return parts[1].strip(), phone, "", "未知"
+            return parts[1].strip(), phone, "", "未知", meta
 
-    return "", "", text or str(data) or "NO_NUMBERS", ""
+    return "", "", text or str(data) or "NO_NUMBERS", "", meta
 
 
 def _smsbower_poll_code(activation_id: str, proxies: Any) -> str:
@@ -669,7 +706,7 @@ def try_verify_phone_via_smsbower(session: requests.Session, *, proxies: Any, hi
         for attempt in range(1, max_tries + 1):
             _raise_if_stopped()
             _info(f"[{attempt}/{max_tries}] 正在向 SmsBower 请求新号码...")
-            aid, phone, gerr, cost = _smsbower_get_number(proxies, service_code=service_code, country_id=country_id)
+            aid, phone, gerr, cost, meta = _smsbower_get_number(proxies, service_code=service_code, country_id=country_id)
             if not aid:
                 last_reason = f"取号失败 {gerr}"
                 _warn(f"⚠️ 第 {attempt}/{max_tries} 次取号失败: {gerr}")
@@ -684,7 +721,8 @@ def try_verify_phone_via_smsbower(session: requests.Session, *, proxies: Any, hi
                 continue
 
             cost_display = f"{cost} $" if cost and cost != "未知" else "未知"
-            _info(f"📱 成功取到新号码: {phone} (订单ID: {aid} | 扣费: {cost_display})")
+            provider_label = meta.get("sms_provider_name") or meta.get("sms_provider_id") or "未知"
+            _info(f"📱 成功取到新号码: {phone} (订单ID: {aid} | 扣费: {cost_display} | 供货商: {provider_label})")
             ok_n, next_n, reason_n = _verify_once(aid, phone, source=f"新号#{attempt}", close_on_success=not reuse_on,
                                                   cancel_on_fail=True)
             if ok_n:
