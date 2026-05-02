@@ -976,6 +976,11 @@ def _hero_sms_poll_code(activation_id: str, proxies: Any) -> str:
                 code = str(sms_obj.get("code") or data.get("code") or "").strip()
             if code:
                 _info(f"🎉 成功匹配验证码: {code}")
+                try:
+                    from utils import core_engine
+                    core_engine.record_sms_code_received("hero_sms")
+                except Exception:
+                    pass
                 return code
 
         if raw_tag in {"STATUS_WAIT_RETRY", "STATUS_WAIT_RESEND"}:

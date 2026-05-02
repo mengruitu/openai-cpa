@@ -178,7 +178,7 @@ def init_config():
                 print(f"[{ts()}] [WARNING] 自动补全配置文件写入失败: {e}")
 
     return user_config
-APP_VERSION = "v13.0.0"
+APP_VERSION = "v14.2.2"
 _c: dict = {}
 WEB_PASSWORD: str = "admin"
 RETAIN_REG_ONLY: bool = False
@@ -294,6 +294,8 @@ SMSBOWER_API_KEY = ""
 SMSBOWER_BASE_URL = "https://smsbower.page/stubs/handler_api.php"
 SMSBOWER_COUNTRY = 0
 SMSBOWER_SERVICE = "dr"
+SMSBOWER_PROVIDER_IDS = ""
+SMSBOWER_EXCEPT_PROVIDER_IDS = ""
 SMSBOWER_AUTO_PICK_COUNTRY = False
 SMSBOWER_VERIFY_ON_REGISTER = False
 SMSBOWER_REUSE_PHONE = True
@@ -328,6 +330,8 @@ CLASH_SUB_URL: str = ""
 WARP_PROXY_LIST: list = []
 _raw_proxy_enable: bool = False
 RAW_PROXY_LIST: list = []
+SIDE_PROXY_POOL_ENABLE: bool = False
+SIDE_PROXY_LIST: list = []
 PROXY_QUEUE: queue.Queue = queue.Queue()
 PROXY_QUEUE_GENERATION: int = 0
 AI_API_BASE: str = ""
@@ -342,10 +346,13 @@ TEMPORAM_COOKIE: str = ""
 FVIA_TOKEN: str = ""
 TMAILOR_CURRENT_TOKEN: str = ""
 REG_MODE: str = "protocol"
+REGISTRATION_STRATEGY: str = "email_first"
 DB_TYPE: str = "sqlite"
 MYSQL_CFG: dict = {}
 _sub2api_proxy_rotation_lock = threading.Lock()
 _sub2api_proxy_rotation_index = 0
+_side_proxy_rotation_lock = threading.Lock()
+_side_proxy_rotation_index = 0
 
 GMAIL_OAUTH_MASTER_EMAIL: str = ""
 GMAIL_OAUTH_FISSION_ENABLE: bool = False
@@ -384,6 +391,31 @@ def get_next_sub2api_proxy_url(raw_value=None) -> str:
         _sub2api_proxy_rotation_index = (_sub2api_proxy_rotation_index + 1) % len(proxy_pool)
     return proxy_pool[current_index]
 
+
+def reset_side_proxy_rotation():
+    global _side_proxy_rotation_index
+    with _side_proxy_rotation_lock:
+        _side_proxy_rotation_index = 0
+
+
+def is_side_proxy_pool_enabled() -> bool:
+    return SIDE_PROXY_POOL_ENABLE and bool(SIDE_PROXY_LIST)
+
+
+def get_next_side_proxy_url() -> str:
+    global _side_proxy_rotation_index
+    if not is_side_proxy_pool_enabled():
+        return ""
+    with _side_proxy_rotation_lock:
+        current_index = _side_proxy_rotation_index % len(SIDE_PROXY_LIST)
+        _side_proxy_rotation_index = (_side_proxy_rotation_index + 1) % len(SIDE_PROXY_LIST)
+    return SIDE_PROXY_LIST[current_index]
+
+
+def get_next_side_proxies() -> dict:
+    proxy = get_next_side_proxy_url()
+    return {"http": proxy, "https": proxy} if proxy else None
+
 def reload_all_configs(new_config_dict=None):
     global _c
     global WEB_PASSWORD
@@ -404,7 +436,7 @@ def reload_all_configs(new_config_dict=None):
     global CPA_THREADS, CHECK_INTERVAL_MINUTES, ENABLE_TOKEN_REVIVE
     global NORMAL_SLEEP_MIN, NORMAL_SLEEP_MAX, NORMAL_TARGET_COUNT
     global _clash_enable, _clash_pool_mode, WARP_PROXY_LIST, PROXY_QUEUE, PROXY_QUEUE_GENERATION
-    global _raw_proxy_enable, RAW_PROXY_LIST
+    global _raw_proxy_enable, RAW_PROXY_LIST, SIDE_PROXY_POOL_ENABLE, SIDE_PROXY_LIST
     global CLASH_CLUSTER_COUNT, CLASH_SUB_URL
     global ENABLE_SUB2API_MODE, SUB2API_URL, SUB2API_KEY
     global SUB2API_MIN_THRESHOLD, SUB2API_BATCH_COUNT, SUB2API_CHECK_INTERVAL, SUB2API_THREADS, SUB2API_TEST_MODEL
@@ -427,7 +459,7 @@ def reload_all_configs(new_config_dict=None):
     global DUCKMAIL_FORWARD_MODE, DUCKMAIL_FORWARD_EMAIL
     global DUCK_USE_PROXY
     global CLUSTER_NODE_NAME, CLUSTER_MASTER_URL, CLUSTER_SECRET
-    global REG_MODE
+    global REG_MODE, REGISTRATION_STRATEGY
     global LOCAL_MS_ENABLE_FISSION, LOCAL_MS_MASTER_EMAIL, LOCAL_MS_PASSWORD, LOCAL_MS_CLIENT_ID, LOCAL_MS_REFRESH_TOKEN, LOCAL_MS_POOL_FISSION
     global LOCAL_MS_SUFFIX_MODE, LOCAL_MS_SUFFIX_LEN_MIN, LOCAL_MS_SUFFIX_LEN_MAX
     global DB_TYPE, MYSQL_CFG
@@ -437,6 +469,7 @@ def reload_all_configs(new_config_dict=None):
     global GMAIL_OAUTH_SUFFIX_MODE, GMAIL_OAUTH_SUFFIX_LEN_MIN, GMAIL_OAUTH_SUFFIX_LEN_MAX
     global DISABLE_FORCED_TAKEOVER
     global SMSBOWER_ENABLED, SMSBOWER_API_KEY, SMSBOWER_BASE_URL, SMSBOWER_COUNTRY, SMSBOWER_SERVICE
+    global SMSBOWER_PROVIDER_IDS, SMSBOWER_EXCEPT_PROVIDER_IDS
     global SMSBOWER_AUTO_PICK_COUNTRY, SMSBOWER_VERIFY_ON_REGISTER, SMSBOWER_REUSE_PHONE
     global SMSBOWER_MAX_PRICE, SMSBOWER_MIN_BALANCE, SMSBOWER_MAX_TRIES, SMSBOWER_POLL_TIMEOUT_SEC, SMSBOWER_MIN_PRICE
     global FIVESIM_ENABLED, FIVESIM_API_KEY, FIVESIM_SERVICE, FIVESIM_COUNTRY
@@ -672,6 +705,10 @@ def reload_all_configs(new_config_dict=None):
     _raw_proxy_conf = _c.get("raw_proxy_pool", {})
     _raw_proxy_enable = safe_bool(_raw_proxy_conf.get("enable", False), default=False)
     RAW_PROXY_LIST = normalize_raw_proxy_list(_raw_proxy_conf.get("proxy_list", []))
+    _side_proxy_conf = _c.get("side_proxy_pool", {})
+    SIDE_PROXY_POOL_ENABLE = safe_bool(_side_proxy_conf.get("enable", False), default=False)
+    SIDE_PROXY_LIST = normalize_raw_proxy_list(_side_proxy_conf.get("proxy_list", []))
+    reset_side_proxy_rotation()
     if is_raw_proxy_pool_enabled():
         _clash_enable = False
         _clash_pool_mode = False
@@ -745,6 +782,8 @@ def reload_all_configs(new_config_dict=None):
     SMSBOWER_BASE_URL = str(_smsbower.get("base_url") or "https://smsbower.page/stubs/handler_api.php").strip()
     SMSBOWER_COUNTRY = safe_int(_smsbower.get("country", 0), default=0)
     SMSBOWER_SERVICE = str(_smsbower.get("service") or "dr").strip()
+    SMSBOWER_PROVIDER_IDS = str(_smsbower.get("provider_ids") or "").strip()
+    SMSBOWER_EXCEPT_PROVIDER_IDS = str(_smsbower.get("except_provider_ids") or "").strip()
     SMSBOWER_AUTO_PICK_COUNTRY = safe_bool(_smsbower.get("auto_pick_country", True), default=True)
     SMSBOWER_VERIFY_ON_REGISTER = safe_bool(_smsbower.get("verify_on_register", False), default=False)
     SMSBOWER_REUSE_PHONE = safe_bool(_smsbower.get("reuse_phone", True), default=True)
@@ -787,7 +826,7 @@ def reload_all_configs(new_config_dict=None):
         "template_success": _tg.get("template_success",
                                     "🎉 <b>注册成功</b>\n⏰ 时间: <code>{time}</code>\n📧 账号: <code>{email}</code>\n🔑 密码: <code>{password}</code>"),
         "template_stop": _tg.get("template_stop",
-                                 "🛑 <b>系统已收到停止指令</b>\n\n📊 <b>最终运行统计</b>：\n成功率: {success_rate}% · 成功: {success}/{target} · 失败: {failed} 次 · 风控拦截: {retries} 次 · 总耗时: {elapsed_time}s · 平均单号: {avg_time}s")
+                                 "🛑 <b>系统已收到停止指令</b>\n\n📊 <b>最终运行统计</b>：\n成功率: {success_rate}% · 成功: {success}/{target} · 失败: {failed} 次 · 风控拦截: {retries} 次 · 接码成功: {sms_codes} 次 · 总耗时: {elapsed_time}s · 平均单号: {avg_time}s")
     }
 
     _duck = _c.get("duckmail", {})
@@ -806,6 +845,9 @@ def reload_all_configs(new_config_dict=None):
     CLUSTER_SECRET = str(_c.get("cluster_secret", "wenfxl666")).strip()
 
     REG_MODE = str(_c.get("reg_mode", "protocol")).strip().lower()
+    REGISTRATION_STRATEGY = str(_c.get("registration_strategy", "email_first")).strip().lower()
+    if REGISTRATION_STRATEGY not in {"email_first", "sms_first"}:
+        REGISTRATION_STRATEGY = "email_first"
 
     _temporam = _c.get("temporam", {})
     TEMPORAM_COOKIE = str(_temporam.get("cookie") or "").strip()

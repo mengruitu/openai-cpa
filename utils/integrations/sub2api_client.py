@@ -63,6 +63,7 @@ def _build_account_item(token_data: Dict[str, Any], settings: Dict[str, Any], pr
                 "gpt-5.3-codex":"gpt-5.3-codex",
                 "gpt-5.4":"gpt-5.4",
                 "gpt-5.4-mini":"gpt-5.4-mini",
+                "gpt-5.5":"gpt-5.5",
             },
             "organization_id": token_data.get("workspace_id", ""),
             "refresh_token": token_data.get("refresh_token", ""),

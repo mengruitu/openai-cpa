@@ -19,6 +19,10 @@ from .user_utils import _generate_password
 
 
 def run(proxy: Optional[str], run_ctx: dict = None) -> tuple:
+    if getattr(cfg, "REGISTRATION_STRATEGY", "email_first") == "sms_first" and getattr(cfg, "REG_MODE", "protocol") == "protocol":
+        from utils.auth_pipeline.sms_first import run_sms_first
+        return run_sms_first(proxy, run_ctx=run_ctx)
+
     processed_mails: set = set()
     proxy = cfg.format_docker_url(proxy)
     if proxy and proxy.startswith("socks5://"):

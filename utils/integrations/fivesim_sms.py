@@ -300,6 +300,11 @@ def _fivesim_poll_code(order_id: str, proxies: Any, expected_sms_index: int = 0)
                 code = str(sms_list[expected_sms_index].get("code", ""))
                 if code:
                     _info(f"🎉 成功接收到第 {expected_sms_index + 1} 条短信验证码: {code}")
+                    try:
+                        from utils import core_engine
+                        core_engine.record_sms_code_received("fivesim")
+                    except Exception:
+                        pass
                     return code
 
         elif ok and data and data.get("status") in ["CANCELED", "BANNED", "TIMEOUT"]:

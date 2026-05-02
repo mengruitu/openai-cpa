@@ -67,6 +67,20 @@ def _smsbower_order_max_price() -> float:
 def _smsbower_order_min_price() -> float:
     return float(getattr(cfg, 'SMSBOWER_MIN_PRICE', 0.0))
 
+def _smsbower_provider_ids() -> str:
+    return _smsbower_clean_id_csv(getattr(cfg, 'SMSBOWER_PROVIDER_IDS', ''))
+
+def _smsbower_except_provider_ids() -> str:
+    return _smsbower_clean_id_csv(getattr(cfg, 'SMSBOWER_EXCEPT_PROVIDER_IDS', ''))
+
+def _smsbower_clean_id_csv(value: Any) -> str:
+    parts = []
+    for raw in str(value or "").replace("，", ",").split(","):
+        item = raw.strip()
+        if item.isdigit():
+            parts.append(str(int(item)))
+    return ",".join(dict.fromkeys(parts))
+
 def _smsbower_reuse_enabled() -> bool:
     return bool(getattr(cfg, 'SMSBOWER_REUSE_PHONE', True))
 
@@ -104,7 +118,8 @@ _SMSBOWER_RUNTIME: dict[str, float] = {
 }
 _SMSBOWER_REUSE_LOCK = threading.Lock()
 _SMSBOWER_REUSE_STATE: dict[str, Any] = {
-    "activation_id": "", "phone": "", "service": "", "country": -1, "uses": 0, "updated_at": 0.0,
+    "activation_id": "", "phone": "", "service": "", "country": -1, "provider_ids": "", "except_provider_ids": "",
+    "uses": 0, "updated_at": 0.0,
 }
 _SMSBOWER_COUNTRY_LOCK = threading.Lock()
 _SMSBOWER_COUNTRY_TIMEOUTS: dict[int, int] = {}
@@ -130,7 +145,7 @@ def _sync_reuse_to_db():
     db_manager.set_sys_kv("smsbower_reuse_data", _SMSBOWER_REUSE_STATE)
 
 
-def _smsbower_reuse_get(service: str, country: int) -> tuple[str, str, int]:
+def _smsbower_reuse_get(service: str, country: int, provider_ids: str = "", except_provider_ids: str = "") -> tuple[str, str, int]:
     now = time.time()
     ttl = _smsbower_reuse_ttl_sec()
     max_uses = _smsbower_reuse_max_uses()
@@ -140,6 +155,8 @@ def _smsbower_reuse_get(service: str, country: int) -> tuple[str, str, int]:
         aid = str(_SMSBOWER_REUSE_STATE.get("activation_id") or "").strip()
         phone = str(_SMSBOWER_REUSE_STATE.get("phone") or "").strip()
         state_svc = str(_SMSBOWER_REUSE_STATE.get("service") or "").strip()
+        state_provider_ids = _smsbower_clean_id_csv(_SMSBOWER_REUSE_STATE.get("provider_ids") or "")
+        state_except_provider_ids = _smsbower_clean_id_csv(_SMSBOWER_REUSE_STATE.get("except_provider_ids") or "")
         try:
             state_country = int(_SMSBOWER_REUSE_STATE.get("country") or -1)
         except Exception:
@@ -147,19 +164,24 @@ def _smsbower_reuse_get(service: str, country: int) -> tuple[str, str, int]:
         uses = int(_SMSBOWER_REUSE_STATE.get("uses") or 0)
         updated = float(_SMSBOWER_REUSE_STATE.get("updated_at") or 0.0)
 
-        valid = bool(aid and phone) and (state_svc == svc) and (state_country == ctry) and (uses < max_uses) and (
+        valid = bool(aid and phone) and (state_svc == svc) and (state_country == ctry) and (
+                    state_provider_ids == _smsbower_clean_id_csv(provider_ids)) and (
+                    state_except_provider_ids == _smsbower_clean_id_csv(except_provider_ids)) and (uses < max_uses) and (
                     updated > 0 and (now - updated) <= ttl)
         if not valid: return "", "", 0
         return aid, phone, uses
 
 
-def _smsbower_reuse_set(activation_id: str, phone: str, service: str, country: int) -> None:
+def _smsbower_reuse_set(activation_id: str, phone: str, service: str, country: int,
+                        provider_ids: str = "", except_provider_ids: str = "") -> None:
     aid = str(activation_id or "").strip()
     ph = str(phone or "").strip()
     if not aid or not ph: return
     with _SMSBOWER_REUSE_LOCK:
         _SMSBOWER_REUSE_STATE.update(
             {"activation_id": aid, "phone": ph, "service": str(service or "").strip(), "country": int(country),
+             "provider_ids": _smsbower_clean_id_csv(provider_ids),
+             "except_provider_ids": _smsbower_clean_id_csv(except_provider_ids),
              "uses": 0, "updated_at": time.time()})
     _sync_reuse_to_db()
 
@@ -174,7 +196,8 @@ def _smsbower_reuse_touch(increase: bool = False) -> None:
 def _smsbower_reuse_clear() -> None:
     with _SMSBOWER_REUSE_LOCK:
         _SMSBOWER_REUSE_STATE.update(
-            {"activation_id": "", "phone": "", "service": "", "country": -1, "uses": 0, "updated_at": 0.0})
+            {"activation_id": "", "phone": "", "service": "", "country": -1, "provider_ids": "",
+             "except_provider_ids": "", "uses": 0, "updated_at": 0.0})
     _sync_reuse_to_db()
 
 
@@ -347,13 +370,21 @@ def _get_country_names_map(proxies: Any) -> dict[int, str]:
     return _SMSBOWER_COUNTRY_NAMES_MAP
 
 
-def _smsbower_prices_by_service(service_code: str, proxies: Any, *, force_refresh: bool = False) -> list[
+def _smsbower_prices_by_service(service_code: str, proxies: Any, *, force_refresh: bool = False,
+                                provider_ids: Optional[str] = None, except_provider_ids: Optional[str] = None) -> list[
     dict[str, Any]]:
     svc = str(service_code or "dr").strip()
     now = time.time()
+    provider_filter = _smsbower_clean_id_csv(_smsbower_provider_ids() if provider_ids is None else provider_ids)
+    except_provider_filter = _smsbower_clean_id_csv(
+        _smsbower_except_provider_ids() if except_provider_ids is None else except_provider_ids
+    )
+    include_providers = {int(x) for x in provider_filter.split(",") if x.isdigit()}
+    exclude_providers = {int(x) for x in except_provider_filter.split(",") if x.isdigit()}
+    cache_key = f"{svc}|{provider_filter}|{except_provider_filter}"
 
     with _SMSBOWER_PRICE_CACHE_LOCK:
-        if not force_refresh and _SMSBOWER_PRICE_CACHE.get("service") == svc and (
+        if not force_refresh and _SMSBOWER_PRICE_CACHE.get("service") == cache_key and (
                 now - _SMSBOWER_PRICE_CACHE.get("updated_at", 0)) <= _smsbower_price_cache_ttl_sec():
             return [dict(x) for x in _SMSBOWER_PRICE_CACHE.get("items", [])]
 
@@ -365,17 +396,37 @@ def _smsbower_prices_by_service(service_code: str, proxies: Any, *, force_refres
         for cid, entry in data.items():
             if not str(cid).isdigit() or int(cid) in _OPENAI_SMS_BLOCKED_COUNTRY_IDS:
                 continue
-            target = entry.get(svc) if svc in entry else entry
-            if isinstance(target, dict) and "cost" in target:
+            target = entry.get(svc) if isinstance(entry, dict) and svc in entry else entry
+            if not isinstance(target, dict):
+                continue
+
+            provider_rows = []
+            if "cost" in target or "price" in target:
+                provider_rows.append(("", target))
+            else:
+                provider_rows.extend(target.items())
+
+            for provider_key, provider_entry in provider_rows:
+                if not isinstance(provider_entry, dict):
+                    continue
                 try:
                     c_id = int(cid)
-                    c_cost = float(target.get("cost", -1))
-                    c_count = int(target.get("count", 0))
+                    provider_id_raw = provider_entry.get("provider_id", provider_key)
+                    provider_id = int(provider_id_raw) if str(provider_id_raw).strip().isdigit() else 0
+                    if provider_id:
+                        if include_providers and provider_id not in include_providers:
+                            continue
+                        if provider_id in exclude_providers:
+                            continue
+                    c_cost = float(provider_entry.get("cost", provider_entry.get("price", -1)))
+                    c_count = int(provider_entry.get("count", 0))
 
                     if c_count > 0:
                         rows.append({
                             "country": c_id,
                             "name": name_map.get(c_id, f"未知国家({c_id})"),
+                            "provider_id": provider_id,
+                            "provider": str(provider_id or ""),
                             "cost": c_cost,
                             "count": c_count
                         })
@@ -383,9 +434,9 @@ def _smsbower_prices_by_service(service_code: str, proxies: Any, *, force_refres
                     continue
 
     if rows:
-        rows.sort(key=lambda x: (x.get("cost", 999), -x.get("count", 0)))
+        rows.sort(key=lambda x: (x.get("cost", 999), -x.get("count", 0), x.get("country", 9999), x.get("provider_id", 0)))
         with _SMSBOWER_PRICE_CACHE_LOCK:
-            _SMSBOWER_PRICE_CACHE.update({"service": svc, "updated_at": now, "items": rows})
+            _SMSBOWER_PRICE_CACHE.update({"service": cache_key, "updated_at": now, "items": rows})
 
     return rows
 
@@ -438,6 +489,10 @@ def _smsbower_get_number(proxies: Any, *, service_code: str, country_id: int) ->
     params = {"service": service_code, "country": country_id}
     if _smsbower_order_max_price() > 0: params["maxPrice"] = _smsbower_order_max_price()
     if _smsbower_order_min_price() > 0: params["minPrice"] = _smsbower_order_min_price()
+    provider_ids = _smsbower_provider_ids()
+    except_provider_ids = _smsbower_except_provider_ids()
+    if provider_ids: params["providerIds"] = provider_ids
+    if except_provider_ids: params["exceptProviderIds"] = except_provider_ids
     ok, text, data = _smsbower_request("getNumberV2", proxies=proxies, params=params, timeout=30)
 
     if ok and isinstance(data, dict):
@@ -474,6 +529,11 @@ def _smsbower_poll_code(activation_id: str, proxies: Any) -> str:
         if ok and upper.startswith("STATUS_OK"):
             code = text.split(":", 1)[1].strip() if ":" in text else ""
             _info(f"🎉 成功接收到短信验证码: {code}")
+            try:
+                from utils import core_engine
+                core_engine.record_sms_code_received("smsbower")
+            except Exception:
+                pass
             return code
 
         if any(x in upper for x in ["STATUS_CANCEL", "NO_ACTIVATION", "BAD_STATUS"]):
@@ -577,14 +637,18 @@ def try_verify_phone_via_smsbower(session: requests.Session, *, proxies: Any, hi
         verify_balance_start, _ = smsbower_get_balance(proxies)
         service_code = _smsbower_resolve_service_code(proxies)
         pref_country = _smsbower_resolve_country_id(proxies)
+        provider_ids = _smsbower_provider_ids()
+        except_provider_ids = _smsbower_except_provider_ids()
         country_id = _smsbower_pick_country_id(proxies, service_code=service_code, preferred_country=pref_country)
         excluded_countries = set()
         reuse_on = _smsbower_reuse_enabled()
 
         _info(f"SmsBower 国家分配: 目标国家ID为 {country_id} (服务代码: {service_code})")
+        if provider_ids or except_provider_ids:
+            _info(f"SmsBower 提供商筛选: providerIds={provider_ids or '不限'} exceptProviderIds={except_provider_ids or '无'}")
 
         if reuse_on:
-            rid, rphone, rused = _smsbower_reuse_get(service_code, country_id)
+            rid, rphone, rused = _smsbower_reuse_get(service_code, country_id, provider_ids, except_provider_ids)
             if rid and rphone:
                 _info(f"♻️ 尝试复用旧号码: {rphone} (已使用 {rused} 次)")
                 ok_r, next_r, reason_r = _verify_once(rid, rphone, source="复用号码", close_on_success=False,
@@ -627,7 +691,7 @@ def try_verify_phone_via_smsbower(session: requests.Session, *, proxies: Any, hi
                 _smsbower_country_mark_success(country_id)
                 _smsbower_country_record_result(country_id, True)
                 if reuse_on:
-                    _smsbower_reuse_set(aid, phone, service_code, country_id)
+                    _smsbower_reuse_set(aid, phone, service_code, country_id, provider_ids, except_provider_ids)
                     _info(f"📥 验证成功！号码 {phone} 已挂起并存入复用池。")
                 return True, next_n
 

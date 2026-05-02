@@ -26,3 +26,9 @@ utils/auth_core/
 test.py
 aitest.py
 register.py.bak
+
+# Local captures and temporary patch workspaces
+liuchegn/
+patch*/
+overrides/
+*.har

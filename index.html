@@ -122,6 +122,17 @@
                         <span class="text-base" :class="currentTab === tab.id ? 'scale-110 transition-transform drop-shadow-sm' : ''">{{ tab.icon }}</span>
                         {{ tab.name }}
                     </button>
+                    <div class="flex md:hidden items-center gap-2 pl-2 ml-1 border-l border-slate-200/60 shrink-0">
+                        <button @click="restartSystem" class="whitespace-nowrap px-4 py-2.5 text-xs font-bold text-amber-600 bg-amber-50/50 rounded-xl border border-amber-200/60 shadow-sm active:scale-95 transition-all">
+                            ⚡ 重启项目
+                        </button>
+                        <button @click="checkUpdate(true)" class="whitespace-nowrap px-4 py-2.5 text-xs font-bold text-blue-600 bg-blue-50/50 rounded-xl border border-blue-200/60 shadow-sm active:scale-95 transition-all">
+                            🔄 检查更新
+                        </button>
+                        <button @click="logout" class="whitespace-nowrap px-4 py-2.5 text-xs font-bold text-slate-500 bg-slate-50 rounded-xl border border-slate-200/60 shadow-sm active:scale-95 transition-all hover:text-rose-500">
+                            🚪 退出登录
+                        </button>
+                    </div>
                 </nav>
                 <div class="hidden md:block p-4 border-t border-slate-200/60 shrink-0 mt-auto bg-transparent">
                     <button @click="restartSystem" class="w-full flex items-center justify-center gap-2 text-xs font-bold text-amber-600 hover:text-amber-700 py-3 mb-2.5 rounded-xl hover:bg-amber-100/50 transition-colors border border-amber-200/60 bg-amber-50/50 shadow-sm">
@@ -167,6 +178,18 @@
                                             古法
                                         </button>
                                     </div>
+                                    <div class="bg-slate-100 p-1 rounded-xl flex w-full sm:w-60 shadow-inner border border-slate-200 shrink-0">
+                                        <button type="button" @click.stop.prevent="changeRegistrationStrategy('email_first')"
+                                                :class="['flex-1 py-1.5 md:py-2 px-2 md:px-3 rounded-lg text-xs md:text-sm font-bold transition-all whitespace-nowrap',
+                                                         (config.registration_strategy || 'email_first') === 'email_first' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700']">
+                                            邮箱优先
+                                        </button>
+                                        <button type="button" @click.stop.prevent="changeRegistrationStrategy('sms_first')"
+                                                :class="['flex-1 py-1.5 md:py-2 px-2 md:px-3 rounded-lg text-xs md:text-sm font-bold transition-all whitespace-nowrap',
+                                                         config.registration_strategy === 'sms_first' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-700']">
+                                            SMS优先
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -206,6 +229,8 @@
                         <span class="text-slate-500 font-bold whitespace-nowrap">密码受阻 <span class="text-orange-500 font-black ml-0.5">{{stats.pwd_blocked || 0}}</span></span>
                         <span class="text-slate-300 hidden sm:inline">•</span>
                         <span class="text-slate-500 font-bold whitespace-nowrap">出现手机 <span class="text-purple-500 font-black ml-0.5">{{stats.phone_verify || 0}}</span></span>
+                        <span class="text-slate-300 hidden sm:inline">•</span>
+                        <span class="text-slate-500 font-bold whitespace-nowrap">接码成功 <span class="text-cyan-500 font-black ml-0.5">{{stats.sms_codes || 0}}</span></span>
                         <span class="text-slate-300 hidden sm:inline">•</span>
                         <span class="text-slate-500 font-bold whitespace-nowrap">总耗时 <span class="text-slate-800 font-black ml-0.5">{{stats.elapsed}}</span></span>
                         <span class="text-slate-300 hidden sm:inline">•</span>
@@ -367,6 +392,7 @@
                                         <span>风控拦截 <span class="text-amber-500 font-black ml-0.5">{{node.stats.retries}}</span></span><span>•</span>
                                         <span>密码受阻 <span class="text-orange-500 font-black ml-0.5">{{node.stats.pwd_blocked}}</span></span><span>•</span>
                                         <span>出现手机 <span class="text-purple-500 font-black ml-0.5">{{node.stats.phone_verify}}</span></span><span>•</span>
+                                        <span>接码成功 <span class="text-cyan-500 font-black ml-0.5">{{node.stats.sms_codes || 0}}</span></span><span>•</span>
                                         <span>耗时 <span class="text-slate-800 font-black ml-0.5">{{node.stats.elapsed}}</span></span><span>•</span>
                                         <span>平均 <span class="text-slate-800 font-black ml-0.5">{{node.stats.avg_time}}</span></span>
                                     </div>
@@ -450,8 +476,11 @@
 
                                     <div class="flex items-center bg-white rounded-lg p-1 shadow-sm border border-slate-100 gap-1">
                                         <span class="text-xs text-slate-400 font-bold px-2">推送:</span>
-                                        <button @click="bulkPushCPA" class="px-3 py-1 text-xs font-bold text-emerald-600 hover:bg-emerald-50 rounded transition flex items-center"><span class="mr-1">🚀</span>CPA</button>
-                                        <button @click="bulkPushSub2API" class="px-3 py-1 text-xs font-bold text-purple-600 hover:bg-purple-50 rounded transition flex items-center"><span class="mr-1">🛸</span>Sub</button>
+                                        <template v-if="!selectedAccounts.some(acc => acc.status === 'image2api')">
+                                            <button @click="bulkPushCPA" class="px-3 py-1 text-xs font-bold text-emerald-600 hover:bg-emerald-50 rounded transition flex items-center"><span class="mr-1">🚀</span>CPA</button>
+                                            <button @click="bulkPushSub2API" class="px-3 py-1 text-xs font-bold text-purple-600 hover:bg-purple-50 rounded transition flex items-center"><span class="mr-1">🛸</span>Sub</button>
+                                        </template>
+                                        <button @click="bulkPushImage2API" class="px-3 py-1 text-xs font-bold text-pink-600 hover:bg-pink-50 rounded transition flex items-center"><span class="mr-1">🖼️</span>Img2API</button>
                                     </div>
                                     <div class="flex items-center bg-white rounded-lg p-1 shadow-sm border border-slate-100 gap-1">
                                         <span class="text-xs text-slate-400 font-bold px-2">凭证:</span>
@@ -505,87 +534,90 @@
                                 </div>
                             </div>
 
-                            <div class="overflow-x-auto w-full">
+                            <div class="overflow-x-auto w-full hide-scrollbar">
                                 <table class="min-w-full divide-y divide-slate-100">
                                     <thead class="bg-slate-50/80">
                                         <tr>
-                                            <th class="px-5 md:px-8 py-4 text-left w-12"><input type="checkbox" @change="toggleAll" :checked="selectedAccounts.length === filteredAccounts.length && filteredAccounts.length > 0" class="form-checkbox w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 transition-all"></th>
-                                            <th class="px-5 md:px-8 py-4 text-left text-[11px] font-black text-slate-400 uppercase tracking-widest w-16">#</th>
-                                            <th class="px-5 md:px-8 py-4 text-left text-[11px] font-black text-slate-400 uppercase tracking-widest min-w-[200px]">邮箱账号</th>
-                                            <th class="px-5 md:px-8 py-4 text-left text-[11px] font-black text-slate-400 uppercase tracking-widest min-w-[150px]">登录密码</th>
-                                            <th class="px-5 md:px-8 py-4 text-left text-[11px] font-black text-slate-400 uppercase tracking-widest min-w-[180px]">入库（北京时间）</th>
-                                            <th class="px-5 md:px-8 py-4 text-left text-[11px] font-black text-slate-400 uppercase tracking-widest min-w-[120px]">凭证状态</th>
-                                            <th class="px-5 md:px-8 py-4 text-center text-[11px] font-black text-slate-400 uppercase tracking-widest min-w-[100px]">活跃状态</th>
-                                            <th class="px-5 md:px-8 py-4 text-center text-[11px] font-black text-slate-400 uppercase tracking-widest min-w-[120px]">推送平台</th>
-                                            <th class="px-5 md:px-8 py-4 text-center text-[11px] font-black text-slate-400 uppercase tracking-widest min-w-[180px]">操作</th>
+                                            <th class="px-3 md:px-4 py-3 text-left w-10"><input type="checkbox" @change="toggleAll" :checked="selectedAccounts.length === filteredAccounts.length && filteredAccounts.length > 0" class="form-checkbox w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 transition-all"></th>
+                                            <th class="px-2 md:px-3 py-3 text-left text-[11px] font-black text-slate-400 uppercase tracking-widest w-12">#</th>
+                                            <th class="px-3 md:px-4 py-3 text-left text-[11px] font-black text-slate-400 uppercase tracking-widest min-w-[200px]">账号 & 密码</th>
+                                            <th class="px-3 md:px-4 py-3 text-left text-[11px] font-black text-slate-400 uppercase tracking-widest min-w-[120px]">当前状态</th>
+                                            <th class="px-3 md:px-4 py-3 text-center text-[11px] font-black text-slate-400 uppercase tracking-widest min-w-[100px]">推送平台</th>
+                                            <th class="px-3 md:px-4 py-3 text-center text-[11px] font-black text-slate-400 uppercase tracking-widest min-w-[130px]">入库时间</th>
+                                            <th class="px-3 md:px-4 py-3 text-center text-[11px] font-black text-slate-400 uppercase tracking-widest min-w-[120px]">操作</th>
                                         </tr>
                                     </thead>
                                     <tbody class="bg-white divide-y divide-slate-50">
                                         <tr v-if="filteredAccounts.length === 0">
-                                            <td colspan="6" class="px-6 py-16 text-center text-slate-400 font-medium bg-slate-50/30">暂无本地记录</td>
+                                            <td colspan="7" class="px-6 py-16 text-center text-slate-400 font-medium bg-slate-50/30">暂无本地记录</td>
                                         </tr>
                                         <tr v-for="(acc, index) in filteredAccounts" :key="index" class="hover:bg-indigo-50/40 transition duration-200" :class="{'bg-indigo-50/60': selectedAccounts.includes(acc)}">
-                                            <td class="px-5 md:px-8 py-4 whitespace-nowrap"><input type="checkbox" :value="acc" v-model="selectedAccounts" class="form-checkbox w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 transition-all"></td>
-                                            <td class="px-5 md:px-8 py-4 whitespace-nowrap text-sm text-slate-400 font-mono font-medium">{{ index + 1 }}</td>
-                                            <td class="px-5 md:px-8 py-4 whitespace-nowrap text-sm font-bold text-slate-700">
-                                                {{ showAccountsPlaintext ? acc.email : maskEmail(acc.email) }}
-                                            </td>
-                                            <td class="px-5 md:px-8 py-4 whitespace-nowrap text-sm text-slate-500 font-mono">
-                                                <span class="bg-slate-50 rounded-md px-2.5 py-1 border border-slate-100 shadow-sm">{{ showAccountsPlaintext ? acc.password : '••••••••' }}</span>
-                                            </td>
-                                            <td class="px-5 md:px-8 py-4 whitespace-nowrap text-sm text-slate-500 font-mono">
-                                                <span class="bg-slate-50 rounded-md px-2.5 py-1 border border-slate-100">{{ formatTime(acc.created_at) }}</span>
-                                            </td>
-                                            <td class="px-5 md:px-8 py-4 whitespace-nowrap">
-                                                <span v-if="acc.status === '有凭证'" class="px-2.5 py-1.5 text-[10px] font-black bg-emerald-50 text-emerald-600 rounded-md border border-emerald-200 shadow-sm flex items-center w-max gap-1">
-                                                    <span class="text-xs">✅</span> 完整凭证
-                                                </span>
-                                                <span v-else-if="acc.status === '仅注册成功'" class="px-2.5 py-1.5 text-[10px] font-black bg-amber-50 text-amber-600 rounded-md border border-amber-200 shadow-sm flex items-center w-max gap-1">
-                                                    <span class="text-xs">⚠️</span> 仅注册成功
-                                                </span>
-                                                <span v-else class="px-2.5 py-1.5 text-[10px] font-black bg-slate-50 text-slate-500 rounded-md border border-slate-200 shadow-sm flex items-center w-max gap-1">
-                                                    <span class="text-xs">❓</span> 未知状态
-                                                </span>
-                                            </td>
-                                            <td class="px-5 md:px-8 py-4 whitespace-nowrap text-center">
-                                                <div v-if="!acc.push_platform" class="inline-flex items-center gap-2 text-[11px] font-bold text-slate-400 bg-slate-100/50 px-2.5 py-1.5 rounded-md border border-slate-200">
-                                                    <span class="w-2 h-2 bg-slate-300 rounded-full"></span> 未推送
+                                            <td class="px-3 md:px-4 py-3 whitespace-nowrap"><input type="checkbox" :value="acc" v-model="selectedAccounts" class="form-checkbox w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 transition-all"></td>
+                                            <td class="px-2 md:px-3 py-3 whitespace-nowrap text-xs text-slate-400 font-mono font-medium">{{ index + 1 }}</td>
+
+                                            <td class="px-3 md:px-4 py-3 whitespace-nowrap">
+                                                <div class="flex flex-col gap-1.5">
+                                                    <span class="text-sm font-bold text-slate-700">{{ showAccountsPlaintext ? acc.email : maskEmail(acc.email) }}</span>
+                                                    <div class="flex items-center gap-1.5 text-xs text-slate-500 font-mono">
+                                                        <span class="text-[10px] opacity-70">🔑</span>
+                                                        <span class="bg-slate-50 rounded px-1.5 py-0.5 border border-slate-100 shadow-sm">{{ showAccountsPlaintext ? acc.password : '••••••••' }}</span>
+                                                    </div>
                                                 </div>
-
-                                                <template v-else>
-                                                    <div v-if="acc.is_active === 1" class="inline-flex items-center gap-2 text-[11px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1.5 rounded-md border border-emerald-200 shadow-sm">
-                                                        <span class="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_8px_#10b981] animate-pulse"></span> 活跃中
-                                                    </div>
-                                                    <div v-else-if="acc.is_active === 0" class="inline-flex items-center gap-2 text-[11px] font-black text-rose-600 bg-rose-50 px-2.5 py-1.5 rounded-md border border-rose-200 shadow-sm">
-                                                        <span class="w-2 h-2 bg-rose-500 rounded-full shadow-[0_0_8px_#f43f5e]"></span> 已禁用
-                                                    </div>
-                                                    <div v-else class="inline-flex items-center gap-2 text-[11px] font-bold text-slate-400 bg-slate-50 px-2.5 py-1.5 rounded-md border border-slate-200 shadow-sm">
-                                                        <span class="w-2 h-2 bg-slate-300 rounded-full"></span> 待检查
-                                                    </div>
-                                                </template>
                                             </td>
-                                            <td class="px-5 md:px-8 py-4 whitespace-nowrap text-center">
-                                                <div v-if="acc.push_platform" class="flex flex-col items-center gap-1">
-                                                    <span v-if="acc.push_platform.toUpperCase().includes('CPA') && acc.push_platform.toUpperCase().includes('SUB2API')"
-                                                          class="px-2 py-0.5 text-[10px] font-black rounded uppercase tracking-widest border shadow-sm bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-transparent">
-                                                        ✨ 双平台
+
+                                            <td class="px-3 md:px-4 py-3 whitespace-nowrap">
+                                                <div class="flex flex-col gap-1.5 items-start">
+                                                    <span v-if="acc.status === '有凭证'" class="px-2 py-1 text-[10px] font-black bg-emerald-50 text-emerald-600 rounded border border-emerald-200 shadow-sm flex items-center gap-1">
+                                                        <span>✅</span> 完整凭证
+                                                    </span>
+                                                    <span v-else-if="acc.status === 'image2api'" class="px-2 py-1 text-[10px] font-black bg-emerald-50 text-emerald-600 rounded border border-emerald-200 shadow-sm flex items-center gap-1">
+                                                        <span>✅</span> image2api
+                                                    </span>
+                                                    <span v-else-if="acc.status === '仅注册成功'" class="px-2 py-1 text-[10px] font-black bg-amber-50 text-amber-600 rounded border border-amber-200 shadow-sm flex items-center gap-1">
+                                                        <span>⚠️</span> 仅注册
+                                                    </span>
+                                                    <span v-else class="px-2 py-1 text-[10px] font-black bg-slate-50 text-slate-500 rounded border border-slate-200 shadow-sm flex items-center gap-1">
+                                                        <span>❓</span> 未知
                                                     </span>
 
-                                                    <span v-else-if="acc.push_platform.toUpperCase().includes('CPA')"
-                                                          class="px-2 py-0.5 text-[10px] font-black rounded uppercase tracking-widest border shadow-sm bg-indigo-50 text-indigo-700 border-indigo-200">
-                                                        CPA
-                                                    </span>
+                                                    <div v-if="!acc.push_platform" class="px-2 py-1 text-[10px] font-bold text-slate-400 bg-slate-100/50 rounded border border-slate-200 flex items-center gap-1">
+                                                        <span class="w-1.5 h-1.5 bg-slate-300 rounded-full"></span> 未推送
+                                                    </div>
+                                                    <template v-else>
+                                                        <div v-if="acc.is_active === 1" class="px-2 py-1 text-[10px] font-black text-emerald-600 bg-emerald-50 rounded border border-emerald-200 shadow-sm flex items-center gap-1">
+                                                            <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_5px_#10b981] animate-pulse"></span> 活跃中
+                                                        </div>
+                                                        <div v-else-if="acc.is_active === 0" class="px-2 py-1 text-[10px] font-black text-rose-600 bg-rose-50 rounded border border-rose-200 shadow-sm flex items-center gap-1">
+                                                            <span class="w-1.5 h-1.5 bg-rose-500 rounded-full shadow-[0_0_5px_#f43f5e]"></span> 已禁用
+                                                        </div>
+                                                        <div v-else class="px-2 py-1 text-[10px] font-bold text-slate-400 bg-slate-50 rounded border border-slate-200 shadow-sm flex items-center gap-1">
+                                                            <span class="w-1.5 h-1.5 bg-slate-300 rounded-full"></span> 待检查
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </td>
 
-                                                    <span v-else-if="acc.push_platform.toUpperCase().includes('SUB2API')"
-                                                          class="px-2 py-0.5 text-[10px] font-black rounded uppercase tracking-widest border shadow-sm bg-purple-50 text-purple-700 border-purple-200">
-                                                        SUB2API
+                                            <td class="px-3 md:px-4 py-3 whitespace-nowrap text-center">
+                                                <div v-if="acc.push_platform" class="flex flex-col gap-1 items-center">
+                                                    <span v-for="badge in getPlatformBadges(acc.push_platform)" :key="badge.name"
+                                                          :class="getBadgeClass(badge.type)"
+                                                          class="px-2 py-0.5 rounded text-[10px] font-black border whitespace-nowrap tracking-wide transition-transform hover:scale-105 shadow-sm">
+                                                        {{ badge.name }}
                                                     </span>
                                                 </div>
-                                                <span v-else class="px-2.5 py-1 bg-slate-50 text-slate-400 text-[10px] font-bold rounded-md border border-slate-200 shadow-sm">未推送</span>
+                                                <span v-else class="px-2 py-0.5 bg-slate-50 text-slate-400 text-[10px] font-bold rounded border border-slate-200 shadow-sm">无</span>
                                             </td>
-                                            <td class="px-5 md:px-8 py-4 whitespace-nowrap text-center text-sm font-bold flex gap-2 justify-center">
-                                                <button @click="triggerAccountAction(acc, 'push')" class="text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg active:scale-95 transition-all shadow-sm">推CPA</button>
-                                                <button @click="triggerAccountAction(acc, 'push_sub2api')" class="text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-3 py-1.5 rounded-lg active:scale-95 transition-all shadow-sm">推Sub</button>
+
+                                            <td class="px-3 md:px-4 py-3 whitespace-nowrap text-center text-xs text-slate-500 font-mono">
+                                                {{ formatTime(acc.created_at) }}
+                                            </td>
+
+                                            <td class="px-3 md:px-4 py-3 whitespace-nowrap text-center">
+                                                <div class="flex gap-1.5 justify-center">
+                                                    <button v-if="acc.status !== 'image2api'" @click="triggerAccountAction(acc, 'push')" class="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-1.5 rounded active:scale-95 transition-all shadow-sm">推CPA</button>
+                                                    <button v-if="acc.status !== 'image2api'" @click="triggerAccountAction(acc, 'push_sub2api')" class="text-[11px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-1.5 rounded active:scale-95 transition-all shadow-sm">推Sub</button>
+                                                    <button @click="triggerAccountAction(acc, 'push_image2api')" class="text-[11px] font-bold text-pink-700 bg-pink-50 hover:bg-pink-100 border border-pink-200 px-2 py-1.5 rounded active:scale-95 transition-all shadow-sm">推Img</button>
+                                                </div>
                                             </td>
                                         </tr>
                                     </tbody>
@@ -826,6 +858,71 @@
                                     <p class="text-[11px] text-slate-400 mt-4 leading-relaxed font-medium">
                                         获取提示：登录 Cloudflare 后，访问 <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" class="text-blue-500 hover:text-blue-600 font-bold hover:underline break-all transition-colors">https://dash.cloudflare.com/profile/api-tokens</a> 获取 Global API Key。
                                     </p>
+
+                                    <div class="mt-8 pt-6 border-t border-slate-200/80">
+                                        <h5 class="text-sm font-black text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-2">
+                                            <span>🌍</span> 基础域名解析与邮件托管 (全局通用)
+                                        </h5>
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                            <div class="bg-indigo-50/40 p-4 md:p-5 rounded-xl border border-indigo-100 shadow-sm flex flex-col hover:bg-indigo-50/80 transition-colors">
+                                                <div class="flex items-center gap-2 mb-2">
+                                                    <span class="bg-indigo-500 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-sm tracking-wider">通用步骤 1</span>
+                                                    <span class="text-sm font-bold text-indigo-900">域名托管与 NS 获取</span>
+                                                </div>
+                                                <p class="text-xs text-indigo-700/70 mb-5 flex-1 font-medium leading-relaxed">
+                                                    💡 <b>说明：</b>提取上方填写的“发信域名池”，在 CF 创建托管档案并分配专属 NS 地址。获取后，请务必前往您购买域名的平台修改 DNS 服务器。
+                                                </p>
+                                                <button @click="handleCFBatchHosting" :disabled="cfTools.isHosting" class="w-full py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 active:scale-95 transition-all shadow-md shadow-indigo-500/20 flex items-center justify-center gap-2 disabled:opacity-50 mt-auto">
+                                                    <span v-if="cfTools.isHosting" class="animate-spin text-base">🔄</span>
+                                                    <span v-else class="text-base">➕</span> 批量托管并获取 NS
+                                                </button>
+                                            </div>
+
+                                            <div class="bg-blue-50/40 p-4 md:p-5 rounded-xl border border-blue-100 shadow-sm flex flex-col hover:bg-blue-50/80 transition-colors">
+                                                <div class="flex items-center gap-2 mb-2">
+                                                    <span class="bg-blue-500 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-sm tracking-wider">通用步骤 2</span>
+                                                    <span class="text-sm font-bold text-blue-900">激活 CF 电子邮件服务</span>
+                                                </div>
+                                                <p class="text-xs text-blue-700/70 mb-5 flex-1 font-medium leading-relaxed">
+                                                    💡 <b>说明：</b>在您的域名 NS 修改生效后点击此按钮。系统将自动校验解析状态，开启 CF 企业邮局，并注入接收邮件所需的 MX 和 TXT 记录。
+                                                </p>
+                                                <button @click="handleCFEnableEmail" :disabled="cfTools.isEnablingEmail" class="w-full py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 active:scale-95 transition-all shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 disabled:opacity-50 mt-auto">
+                                                    <span v-if="cfTools.isEnablingEmail" class="animate-spin text-base">🔄</span>
+                                                    <span v-else class="text-base">⚡</span> 校验 NS 并激活邮件服务
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="cfTools.results.length > 0" class="mt-4 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-fade-in">
+                                            <div class="px-4 py-2.5 bg-slate-100/50 border-b border-slate-200 flex justify-between items-center text-xs">
+                                                <span class="font-bold text-slate-700">📋 域名状态与 NS 结果反馈</span>
+                                                <button @click="cfTools.results = []" class="text-slate-400 hover:text-rose-500 font-bold transition-colors">关闭面板</button>
+                                            </div>
+                                            <div class="max-h-64 overflow-y-auto custom-scrollbar p-3 space-y-3">
+                                                <div v-for="item in cfTools.results" :key="item.domain" class="p-3.5 bg-slate-50 border border-slate-100 rounded-xl flex flex-col gap-3 transition-colors hover:bg-slate-100/50">
+                                                    <div class="flex justify-between items-center">
+                                                        <span class="font-black text-sm text-slate-800">{{ item.domain }}</span>
+                                                        <span :class="item.status === 'active' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-amber-100 text-amber-700 border-amber-200'" class="px-2.5 py-1 rounded text-[10px] font-black border shadow-sm">
+                                                            {{ item.status === 'active' ? '✅ 状态正常/已生效' : '⏳ 等待 NS 生效' }}
+                                                        </span>
+                                                    </div>
+                                                    <div v-if="item.name_servers && item.name_servers.length > 0" class="flex flex-col sm:flex-row gap-3">
+                                                        <div class="flex-1 bg-white border border-slate-200 rounded-lg p-2 text-xs font-mono text-slate-600 flex justify-between items-center shadow-sm">
+                                                            {{ item.name_servers[0] }}
+                                                            <button @click="copyText(item.name_servers[0])" class="text-indigo-500 hover:text-indigo-700 ml-2 active:scale-95" title="复制">📋</button>
+                                                        </div>
+                                                        <div class="flex-1 bg-white border border-slate-200 rounded-lg p-2 text-xs font-mono text-slate-600 flex justify-between items-center shadow-sm">
+                                                            {{ item.name_servers[1] }}
+                                                            <button @click="copyText(item.name_servers[1])" class="text-indigo-500 hover:text-indigo-700 ml-2 active:scale-95" title="复制">📋</button>
+                                                        </div>
+                                                    </div>
+                                                    <div v-if="item.msg" class="text-[11px] font-bold px-2 py-1 rounded border inline-block w-max mt-1" :class="item.msg.includes('✅') ? 'text-emerald-600 bg-emerald-50 border-emerald-100' : 'text-rose-500 bg-rose-50 border-rose-100'">
+                                                        {{ item.msg }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div class="mt-6 p-5 md:p-6 bg-gradient-to-br from-blue-50/80 to-white rounded-2xl border border-blue-100 shadow-sm flex flex-col gap-4">
@@ -1165,8 +1262,47 @@
                                         <p class="flex items-center gap-1.5 text-sm"><span>⚡</span> 减少每日CF 10w触发限制问题，邮件内存储存60秒，阅后既焚，项目重启后会自动清空。</p>
                                         <p class="mt-2 text-indigo-700 opacity-90">系统将自动开启本地服务接收，抛弃R2,D1,KV</p>
                                         <p class="mt-3 text-rose-600 font-black bg-rose-50/50 p-2 rounded-lg border border-rose-100">
-                                            🔥 注意：请务必确保上方填写的密钥与 CF Worker 变量中的 <code>EMAIL_WEBHOOK_SECRET</code> 严格一致！
+                                            🔥 注意：请务必确保上方填写的密钥与 CF Worker 变量中的 <code>EMAIL_WEBHOOK_SECRET</code> 严格一致！非公网域名环境访问面板请不要使用该邮箱
                                         </p>
+
+                                        <div class="mt-6 pt-5 border-t border-indigo-200/50">
+                                        <h5 class="text-sm font-black text-indigo-700 uppercase tracking-wider mb-4 flex items-center gap-2">
+                                            <span>⚙️</span> 内存池专属流水线 (依赖上方全局配置)
+                                        </h5>
+                                        <div class="bg-indigo-50/60 p-5 rounded-2xl border border-indigo-100 shadow-sm space-y-5">
+
+                                            <div>
+                                                <label class="block text-indigo-900 text-xs font-black uppercase tracking-wider mb-2">专属步骤 1：部署引擎 (Worker)</label>
+                                                <p class="text-[11px] text-indigo-700/80 mb-3 leading-relaxed">
+                                                    💡 <b>操作说明：</b>填写专属的 Worker 项目名。点击部署后，系统会自动拉取内存池版源码，注入上方 Webhook 密钥和本面板地址到 CF 边缘节点。此步骤<b>随时可执行</b>。
+                                                </p>
+                                                <div class="flex flex-col sm:flex-row gap-3">
+                                                    <div class="relative flex-1">
+                                                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">📦</span>
+                                                        <input type="text" v-model="cfTools.workerName" placeholder="例如: openai-cpa-mail" class="w-full appearance-none bg-white border border-indigo-200 text-slate-700 rounded-lg py-2.5 pl-9 pr-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm text-sm font-mono">
+                                                    </div>
+                                                    <button @click="handleCFDeployWorker" :disabled="cfTools.isDeploying" class="px-6 py-2.5 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 active:scale-95 transition-all shadow-md shadow-emerald-500/20 flex items-center justify-center gap-2 disabled:opacity-50 whitespace-nowrap shrink-0">
+                                                        <span v-if="cfTools.isDeploying" class="animate-spin text-base">🔄</span>
+                                                        <span v-else class="text-base">🚀</span> 一键创建并部署 Worker
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <div class="pt-4 border-t border-indigo-100/60">
+                                                <label class="block text-indigo-900 text-xs font-black uppercase tracking-wider mb-2">专属步骤 2：配置 Catch-All 指向</label>
+                                                <p class="text-[11px] text-indigo-700/80 mb-3 leading-relaxed">
+                                                    💡 <b>操作说明：</b>请务必在左侧全局面板完成“通用步骤2 (激活邮件服务)”后点击此按钮！系统将把该域名的所有邮件直接路由引流至此 Worker。
+                                                </p>
+                                                <button @click="handleCFCatchAll" :disabled="cfTools.isSettingCatchAll" class="w-full py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 active:scale-95 transition-all shadow-md shadow-indigo-500/20 flex items-center justify-center gap-2 disabled:opacity-50">
+                                                    <span v-if="cfTools.isSettingCatchAll" class="animate-spin text-base">🔄</span>
+                                                    <span v-else class="text-base">🔗</span> 将全局邮件路由 (Catch-All) 绑定至此 Worker
+                                                </button>
+                                            </div>
+
+                                        </div>
+                                    </div>
+
+
                                         <div class="mt-3 pt-3 border-t border-indigo-200/50 flex flex-col sm:flex-row sm:items-center gap-1">
                                             <span>🔗 openai-cpa专属邮箱项目地址：</span>
                                             <a href="https://github.com/wenfxl/openai-cpa-email" target="_blank" class="text-blue-600 hover:text-blue-700 hover:underline font-bold transition-colors">
@@ -1268,14 +1404,40 @@
                                                 <p>2. 点击左侧 <b class="text-slate-800">"数据访问" > "添加或移除范围" > "右边手动添加范围"</b>。填入 <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs text-rose-600 break-all border border-slate-200">https://www.googleapis.com/auth/gmail.modify</code>，点击 “添加到表” 并 “更新”</p>
                                                 <p>3. 点击左侧 <b class="text-slate-800">"客户端" > "创建客户端" > "选择桌面应用程序"</b>。创建</p>
                                                 <p>4. 创建成功后，页面会弹出一个包含客户端 ID 和密钥的窗口。直接点击旁边的 “下载 JSON” 按钮。</p>
-                                                <p>5. 下载生成的 JSON 文件，改名为 <code class="bg-slate-100 px-1.5 py-0.5 rounded text-indigo-600 font-bold border border-slate-200">credentials.json</code>，上传至本项目 <code class="bg-slate-100 px-1.5 py-0.5 rounded font-bold border border-slate-200">/data/</code> 目录。</p>
+                                                <p>5. 下载生成的 JSON 文件，改名为 <code class="bg-slate-100 px-1.5 py-0.5 rounded text-indigo-600 font-bold border border-slate-200">credentials.json</code>，下方上传。</p>
                                             </div>
                                         </div>
 
                                         <div class="relative pl-8">
                                             <div class="absolute -left-[11px] top-0 w-5 h-5 bg-white border-4 border-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.4)]"></div>
                                             <p class="text-xs font-black text-emerald-600 uppercase tracking-widest mb-3">Step 4: 最终激活授权</p>
+                                            <div class="mt-4 p-5 bg-slate-50/80 rounded-2xl border border-slate-200 shadow-inner">
+                                                <label class="block text-slate-700 text-xs font-black uppercase tracking-wider mb-3 flex items-center gap-2">
+                                                    <span>📂</span> 凭据云端化管理 (credentials.json)
+                                                </label>
 
+                                                <div class="flex flex-col sm:flex-row gap-3">
+                                                    <input type="file" id="gmailCredentialsInput" accept=".json"
+                                                           class="flex-1 appearance-none bg-white border border-slate-200 text-slate-700 rounded-xl py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[10px] file:font-black file:bg-indigo-50 file:text-indigo-700 hover:file:bg-emerald-100 cursor-pointer">
+
+                                                    <div class="flex gap-2">
+                                                        <button @click="uploadGmailCredentials"
+                                                                class="px-4 py-2 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-700 active:scale-95 transition-all shadow-md shadow-indigo-500/20 flex items-center gap-1.5">
+                                                            <span>📤</span> 确认上传
+                                                        </button>
+
+                                                        <button @click="clearGmailCredentials"
+                                                                class="px-4 py-2 bg-rose-50 text-rose-600 border border-rose-200 text-xs font-black rounded-xl hover:bg-rose-100 active:scale-95 transition-all flex items-center gap-1.5"
+                                                                title="从数据库删除 credentials 配置">
+                                                            <span>🗑️</span> 清理
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <p class="text-[10px] text-slate-400 mt-2 font-medium">
+                                                    💡 提示：将 Google 下载的 JSON 直接上传即可，系统会自动将其存入数据库，无需再手动操作服务器文件。
+                                                </p>
+                                            </div>
                                             <div class="flex flex-col gap-5 bg-white p-5 rounded-2xl border border-slate-200 shadow-md">
                                                 <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                                                     <p class="text-sm text-slate-600 flex-1 font-bold">点击生成按钮并在浏览器完成登录，复制地址栏 <code class="bg-slate-100 px-1.5 py-0.5 rounded text-rose-500 border border-slate-200">code=</code> 后的字符。</p>
@@ -1964,14 +2126,30 @@
                                     <div class="md:col-span-2 pt-2">
                                         <button @click="fetchSmsBowerPrices" :disabled="isLoadingSmsBowerPrices" class="w-full py-3 bg-gradient-to-r from-indigo-500 to-cyan-500 text-white rounded-xl text-sm md:text-base font-black hover:from-indigo-600 hover:to-cyan-600 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/30 disabled:opacity-50 disabled:cursor-not-allowed border border-indigo-400">
                                             <span :class="{'animate-spin': isLoadingSmsBowerPrices}">{{ isLoadingSmsBowerPrices ? '🔄' : '📊' }}</span>
-                                            {{ isLoadingSmsBowerPrices ? '正在拉取全球库存数据...' : '点击获取当前服务全球价格与库存面板' }}
+                                            {{ isLoadingSmsBowerPrices ? '正在拉取库存数据...' : '点击获取当前服务国家/提供商价格与库存面板' }}
                                         </button>
                                     </div>
 
+                                    <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mt-2">
+                                        <div class="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
+                                            <label class="block text-[11px] text-indigo-900 font-black mb-1 uppercase tracking-wider">指定提供商 ID</label>
+                                            <span class="text-[10px] text-indigo-500/80 block mb-3 font-medium">只从这些 providerIds 买号，多个用英文逗号分隔，如 1,2,3；留空为不限</span>
+                                            <input type="text" v-model.trim="config.smsbower.provider_ids" class="w-full appearance-none bg-white border border-indigo-200 text-slate-700 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors shadow-sm text-sm font-mono" placeholder="1,2,3">
+                                        </div>
+                                        <div class="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
+                                            <label class="block text-[11px] text-indigo-900 font-black mb-1 uppercase tracking-wider">排除提供商 ID</label>
+                                            <span class="text-[10px] text-indigo-500/80 block mb-3 font-medium">避免从这些 exceptProviderIds 买号，多个用英文逗号分隔</span>
+                                            <input type="text" v-model.trim="config.smsbower.except_provider_ids" class="w-full appearance-none bg-white border border-indigo-200 text-slate-700 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors shadow-sm text-sm font-mono" placeholder="4,5,6">
+                                        </div>
+                                    </div>
+
                                     <div v-if="smsBowerPrices.length > 0" class="md:col-span-2 mt-2 bg-white rounded-2xl border border-indigo-200 overflow-hidden shadow-md animate-fade-in">
-                                        <div class="bg-gradient-to-r from-indigo-100 to-blue-50 px-5 py-3.5 border-b border-indigo-200 flex justify-between items-center">
-                                            <span class="text-xs font-black text-indigo-900 tracking-wide flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.8)] animate-pulse"></span>当前项目: <code class="bg-white px-1.5 py-0.5 rounded border border-indigo-200">{{ config.smsbower.service }}</code> 实时库存 (按价格升序)</span>
-                                            <button @click="smsBowerPrices = []" class="text-indigo-500 hover:text-indigo-700 bg-white/50 px-2.5 py-1 rounded-lg text-xs font-bold transition-colors shadow-sm border border-indigo-200/50">关闭面板</button>
+                                        <div class="bg-gradient-to-r from-indigo-100 to-blue-50 px-5 py-3.5 border-b border-indigo-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
+                                            <span class="text-xs font-black text-indigo-900 tracking-wide flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.8)] animate-pulse"></span>当前项目: <code class="bg-white px-1.5 py-0.5 rounded border border-indigo-200">{{ config.smsbower.service }}</code> 国家/提供商实时库存 (按价格升序)</span>
+                                            <div class="flex items-center gap-2 w-full lg:w-auto">
+                                                <input type="text" v-model.trim="smsBowerCountrySearch" class="w-full lg:w-64 bg-white/80 border border-indigo-200 text-slate-700 rounded-lg px-3 py-1.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm" placeholder="搜索国家或国家 ID">
+                                                <button @click="smsBowerPrices = []; smsBowerCountrySearch = ''; expandedSmsBowerCountries = []" class="text-indigo-500 hover:text-indigo-700 bg-white/50 px-2.5 py-1 rounded-lg text-xs font-bold transition-colors shadow-sm border border-indigo-200/50 whitespace-nowrap">关闭面板</button>
+                                            </div>
                                         </div>
                                         <div class="max-h-[350px] overflow-y-auto custom-scrollbar">
                                             <table class="min-w-full divide-y divide-indigo-100/50">
@@ -1984,7 +2162,8 @@
                                                 </tr>
                                             </thead>
                                             <tbody class="divide-y divide-slate-50 text-xs font-medium">
-                                                <tr v-for="item in smsBowerPrices" :key="item.country" class="hover:bg-indigo-50/40 transition-colors group">
+                                                <template v-for="item in getFilteredSmsBowerPrices()" :key="item.country + '-' + (item.provider_id || 'all')">
+                                                <tr class="hover:bg-indigo-50/40 transition-colors group">
                                                     <td class="px-5 py-3">
                                                         <div class="font-black text-slate-700 group-hover:text-indigo-700 transition-colors">{{ item.name }}</div>
                                                         <div class="text-[10px] text-slate-400 font-mono mt-0.5">ID: {{ item.country }}</div>
@@ -1994,12 +2173,29 @@
                                                     </td>
                                                     <td class="px-5 py-3 text-slate-500 font-mono">{{ item.count }}</td>
                                                     <td class="px-5 py-3 text-right">
-                                                        <button @click="config.smsbower.country = item.country; showToast('已切换至: ' + item.name, 'success')"
+                                                        <button @click="toggleSmsBowerCountry(item.country)"
                                                                 class="bg-white border border-indigo-200 text-indigo-600 px-4 py-1.5 rounded-lg hover:bg-indigo-500 hover:text-white hover:border-indigo-500 active:scale-95 transition-all font-bold shadow-sm">
-                                                            选用
+                                                            {{ isSmsBowerCountryExpanded(item.country) ? '收起' : '展开' }}
                                                         </button>
                                                     </td>
                                                 </tr>
+                                                <tr v-if="isSmsBowerCountryExpanded(item.country)" class="bg-indigo-50/30">
+                                                    <td colspan="4" class="px-5 py-3">
+                                                        <div v-if="item.providers && item.providers.length" class="flex flex-wrap gap-1.5">
+                                                            <button v-for="provider in item.providers"
+                                                                    :key="item.country + '-provider-' + provider.id"
+                                                                    @click="toggleSmsBowerProvider(item.country, provider.id, provider.name)"
+                                                                    :class="isSmsBowerProviderSelected(provider.id) ? 'bg-indigo-600 text-white border-indigo-600 shadow-indigo-200' : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-500 hover:text-white hover:border-indigo-500'"
+                                                                    class="px-2.5 py-1 rounded-md border transition-all text-[11px] font-black shadow-sm font-mono">
+                                                                #{{ provider.id }}
+                                                                <span v-if="provider.cost !== null && provider.cost !== undefined" class="ml-1">{{ provider.cost }}$</span>
+                                                                <span v-if="provider.count !== null && provider.count !== undefined" class="ml-1 opacity-70">x{{ provider.count }}</span>
+                                                            </button>
+                                                        </div>
+                                                        <div v-else class="text-xs text-slate-400 font-bold">该国家暂无可展示的 provider 明细</div>
+                                                    </td>
+                                                </tr>
+                                                </template>
                                             </tbody>
                                             </table>
                                         </div>
@@ -2237,6 +2433,32 @@
                                 </div>
                             </div>
 
+                            <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 border border-slate-200/60 border-l-4 border-l-amber-500 bg-gradient-to-br from-amber-50/40 to-white" v-if="config.side_proxy_pool">
+                                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-amber-100 pb-5 gap-4">
+                                    <div>
+                                        <h3 class="text-xl md:text-2xl font-black text-amber-700 tracking-tight flex items-center gap-2"><span>🛰️</span> 旁代理池</h3>
+                                        <p class="text-xs text-amber-700/80 mt-2 font-medium">只给邮箱服务、SMS 接码平台取号/轮询使用；OpenAI 主注册链路仍走全局默认代理或批量代理池。</p>
+                                    </div>
+                                    <label class="relative inline-flex bg-white px-4 py-2.5 md:px-5 md:py-3 rounded-xl cursor-pointer hover:bg-amber-50 transition-colors shadow-sm border border-amber-200 w-full sm:w-auto items-center justify-center group">
+                                        <input type="checkbox" v-model="config.side_proxy_pool.enable" class="sr-only peer">
+                                        <div class="relative w-11 h-6 shrink-0 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all after:shadow-sm peer-checked:bg-amber-600 shadow-inner transition-colors duration-300 group-hover:shadow-md"></div>
+                                        <span class="font-black text-amber-900 text-sm md:text-base ml-3 tracking-wide">启用旁代理池</span>
+                                    </label>
+                                </div>
+                                <div class="space-y-4" :class="{'opacity-50 pointer-events-none grayscale-[50%] transition-opacity duration-300': !config.side_proxy_pool.enable}">
+                                    <div class="bg-amber-50/70 border border-amber-200 rounded-2xl p-5 shadow-sm">
+                                        <label class="block text-amber-800 text-xs font-black mb-2 flex items-center justify-between uppercase tracking-wider">
+                                            旁代理列表
+                                            <span class="text-[10px] font-bold text-amber-500 bg-white px-2 py-0.5 rounded shadow-sm border border-amber-100">一行一个</span>
+                                        </label>
+                                        <p class="text-xs text-amber-700/80 mb-3 leading-relaxed">
+                                            用于隔离 Temp-Mail.org、LuckMail、SmsBower、HeroSMS、5SIM 等第三方资源请求的出口，避免影响主注册代理。
+                                        </p>
+                                        <textarea v-model="sideProxyListStr" class="w-full appearance-none bg-white border border-amber-200 text-amber-900 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-colors shadow-inner h-[160px] font-mono text-xs leading-relaxed placeholder:text-amber-300" placeholder="http://Default.045:password@45.205.27.117:2260&#10;http://user:pass@1.2.3.4:8080&#10;socks5://user:pass@1.2.3.5:1080"></textarea>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div id="proxy-intelligence-pool" class="bg-white p-6 md:p-8 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 border border-slate-200/60 border-l-4 border-l-indigo-500 bg-gradient-to-br from-indigo-50/30 to-white" v-if="config.clash_proxy_pool">
                                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 md:mb-8 border-b border-indigo-100 pb-5 gap-4">
                                     <h3 class="text-xl md:text-2xl font-black text-indigo-700 tracking-tight flex items-center gap-2"><span>🌍</span> Clash 节点智能池</h3>
@@ -2439,6 +2661,10 @@
                                             <input type="checkbox" v-model="cloudFilters" value="cpa" @change="fetchCloudAccounts" class="sr-only">
                                             <span class="w-2 h-2 rounded-full shadow-inner" :class="cloudFilters.includes('cpa') ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]' : 'bg-slate-300 shadow-slate-400/50'"></span> CPA
                                         </label>
+                                        <label :class="cloudFilters.includes('image2api') ? 'bg-white shadow-sm border border-slate-200 text-pink-700' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-300/30'" class="flex items-center gap-2 px-3 py-1.5 cursor-pointer text-xs font-bold rounded-lg transition-all border border-transparent">
+                                            <input type="checkbox" v-model="cloudFilters" value="image2api" @change="fetchCloudAccounts" class="sr-only">
+                                            <span class="w-2 h-2 rounded-full shadow-inner" :class="cloudFilters.includes('image2api') ? 'bg-pink-500 shadow-[0_0_8px_rgba(236,72,153,0.5)]' : 'bg-slate-300 shadow-slate-400/50'"></span> Image2API
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="flex flex-wrap gap-3 items-center w-full xl:w-auto">
@@ -2477,7 +2703,7 @@
                                 </div>
                             </div>
                             <div class="p-5 md:px-8 bg-slate-50/50 border-b border-slate-100">
-                                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
+                                <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 w-full">
                                     <div @click="filterByCard('all', 'active')" class="cursor-pointer active:scale-95 bg-white rounded-xl shadow-sm border border-slate-200 p-4 relative overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5 flex flex-col justify-center group">
                                         <div class="absolute right-0 top-0 w-16 h-16 bg-gradient-to-bl from-emerald-100 to-transparent opacity-50 pointer-events-none rounded-bl-full transition-transform group-hover:scale-110"></div>
                                         <div class="text-[10px] font-black text-emerald-500/80 mb-1 uppercase tracking-widest z-10 relative">云端启用</div>
@@ -2515,7 +2741,21 @@
                                             </span>
                                         </div>
                                     </div>
-
+                                    <div @click="filterByCard('image2api', 'all')" class="cursor-pointer active:scale-95 bg-white rounded-xl shadow-sm border border-slate-200 p-4 relative overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5 flex flex-col justify-between group">
+                                        <div class="absolute right-0 top-0 w-16 h-16 bg-gradient-to-bl from-pink-100 to-transparent opacity-50 pointer-events-none rounded-bl-full transition-transform group-hover:scale-110"></div>
+                                        <div>
+                                            <div class="text-[10px] font-black text-pink-400 mb-1 uppercase tracking-widest z-10 relative">Image2API</div>
+                                            <div class="text-2xl font-black text-pink-600 z-10 relative">{{ inventoryStats?.cloud?.image2api || 0 }}</div>
+                                        </div>
+                                        <div class="flex gap-2 mt-2.5 z-10 relative">
+                                            <span @click.stop="filterByCard('image2api', 'active')" class="cursor-pointer hover:bg-emerald-100 transition-colors text-[10px] font-bold px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded border border-emerald-100 shadow-sm flex items-center gap-1">
+                                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-inner"></span>{{ inventoryStats?.cloud?.image2api_active || 0 }} 存活
+                                            </span>
+                                            <span @click.stop="filterByCard('image2api', 'disabled')" class="cursor-pointer hover:bg-rose-100 transition-colors text-[10px] font-bold px-1.5 py-0.5 bg-rose-50 text-rose-600 rounded border border-rose-100 shadow-sm flex items-center gap-1">
+                                                <span class="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-inner"></span>{{ inventoryStats?.cloud?.image2api_disabled || 0 }} 失效
+                                            </span>
+                                        </div>
+                                    </div>
                                     <div @click="filterByCard('all', 'all')" class="cursor-pointer active:scale-95 bg-white rounded-xl shadow-sm border border-slate-200 p-4 relative overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5 flex flex-col justify-center group">
                                         <div class="absolute right-0 top-0 w-16 h-16 bg-gradient-to-bl from-blue-100 to-transparent opacity-50 pointer-events-none rounded-bl-full transition-transform group-hover:scale-110"></div>
                                         <div class="text-[10px] font-black text-blue-400 mb-1 uppercase tracking-widest z-10 relative">总计推送</div>
@@ -2548,6 +2788,7 @@
                                             </td>
                                             <td class="px-5 md:px-8 py-4 whitespace-nowrap">
                                                 <span v-if="acc.account_type === 'sub2api'" class="px-2.5 py-1 rounded-md text-[10px] md:text-xs font-black bg-purple-50 text-purple-600 border border-purple-200 shadow-sm uppercase tracking-widest">Sub2API</span>
+                                                <span v-else-if="acc.account_type === 'image2api'" class="px-2.5 py-1 rounded-md text-[10px] md:text-xs font-black bg-pink-50 text-pink-600 border border-pink-200 shadow-sm uppercase tracking-widest">Img2API</span>
                                                 <span v-else class="px-2.5 py-1 rounded-md text-[10px] md:text-xs font-black bg-indigo-50 text-indigo-600 border border-indigo-200 shadow-sm uppercase tracking-widest">CPA</span>
                                             </td>
                                             <td class="px-5 md:px-8 py-4 whitespace-nowrap text-sm font-bold text-slate-700">
@@ -2623,7 +2864,26 @@
                                                         </div>
                                                     </div>
                                                 </div>
-
+                                                <div v-else-if="acc.account_type === 'image2api' && acc.details" class="flex flex-col gap-3 w-full pr-6 bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                                                    <div class="flex justify-between items-center text-xs font-bold text-slate-500 bg-white p-2 rounded-lg border border-slate-100 shadow-sm mb-1">
+                                                        <span class="flex items-center gap-1.5">
+                                                            <span class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase border"
+                                                                  :class="acc.details.plan_type === 'Free' ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-pink-50 text-pink-600 border-pink-200'">
+                                                                {{ acc.details.plan_type || 'Free' }}
+                                                            </span>
+                                                        </span>
+                                                        <span class="flex items-center gap-1.5"><span class="text-base">💎</span> 总额度: <span class="font-black text-slate-800 text-sm">{{ acc.details.quota }}</span></span>
+                                                    </div>
+                                                    <div v-if="acc.details.limits && acc.details.limits.length > 0" class="grid grid-cols-2 gap-2">
+                                                        <div v-for="limit in acc.details.limits" :key="limit.feature_name" class="flex flex-col bg-white p-2 rounded border border-slate-100 shadow-sm">
+                                                            <span class="text-[10px] font-black text-slate-500 uppercase truncate" :title="limit.feature_name">{{ limit.feature_name }}</span>
+                                                            <div class="flex items-end justify-between mt-1">
+                                                                <span class="text-sm font-black text-indigo-600">{{ limit.remaining }}</span>
+                                                                <span class="text-[9px] text-slate-400 font-mono scale-90 origin-bottom-right" v-if="limit.reset_after">{{ limit.reset_after.substring(5, 16).replace('T', ' ') }}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                                 <div v-else class="text-xs text-slate-400 font-medium italic flex items-center justify-center gap-2 bg-slate-50 p-3 rounded-xl border border-slate-100 border-dashed">
                                                     <span class="w-2.5 h-2.5 rounded-full bg-slate-300 shadow-inner"></span> {{ acc.account_type === 'cpa' ? '等待右侧测活获取数据...' : '暂无用量缓存' }}
                                                 </div>
@@ -2634,7 +2894,11 @@
                                             </td>
 
                                             <td class="px-5 md:px-8 py-4 whitespace-nowrap text-center text-sm font-bold flex gap-2 justify-center mt-2 md:mt-4">
-                                                <button @click="singleCloudAction(acc, 'check')" :disabled="acc._loading" class="text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 px-3 py-1.5 rounded-lg active:scale-95 transition-all shadow-sm disabled:opacity-50 min-w-[60px] flex items-center justify-center">
+                                                <button v-if="acc.account_type === 'image2api'" @click="singleCloudAction(acc, 'refresh')" :disabled="acc._loading" class="text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 px-3 py-1.5 rounded-lg active:scale-95 transition-all shadow-sm disabled:opacity-50 min-w-[60px] flex items-center justify-center">
+                                                    <span v-if="acc._loading === 'refresh'" class="animate-spin text-base">⏳</span>
+                                                    <span v-else>刷新凭证</span>
+                                                </button>
+                                                <button v-if="acc.account_type !== 'image2api'" @click="singleCloudAction(acc, 'check')" :disabled="acc._loading" class="text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 px-3 py-1.5 rounded-lg active:scale-95 transition-all shadow-sm disabled:opacity-50 min-w-[60px] flex items-center justify-center">
                                                     <span v-if="acc._loading === 'check'" class="animate-spin text-base">⏳</span>
                                                     <span v-else>测活</span>
                                                 </button>
@@ -2687,12 +2951,91 @@
                             </div>
                         </div>
 
+                        <div v-show="currentTab === 'team_accounts'" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative animate-fade-in">
+                            <div v-if="showImportTeamModal" class="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+                                <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl flex flex-col">
+                                    <h3 class="text-xl font-black text-slate-800 mb-4 flex items-center gap-2"><span>📥</span> 批量导入 Team Token</h3>
+                                    <p class="text-xs text-slate-500 mb-3 font-bold bg-slate-50 p-2 rounded border border-slate-100">
+                                        支持格式 (每行一个完整的 JWT Token): <br>
+                                        <code class="text-sky-600">eyJhbGciOiJSUzI1...</code>
+                                    </p>
+                                    <textarea v-model="importTeamText" class="w-full h-64 appearance-none bg-slate-50 border border-slate-200 text-slate-700 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono text-xs leading-relaxed placeholder:text-slate-300 mb-4" placeholder="在此粘贴 access_token 数据..."></textarea>
+                                    <div class="flex justify-end gap-3">
+                                        <button @click="showImportTeamModal = false" class="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all">取消</button>
+                                        <button @click="submitImportTeams" :disabled="isImportingTeam" class="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md flex items-center gap-2 transition-all disabled:opacity-50">
+                                            <span v-if="isImportingTeam" class="animate-spin">🔄</span>确认导入
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
 
+                            <div class="px-5 md:px-8 py-4 border-b border-slate-100 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-slate-50/50">
+                                <div class="flex items-center gap-3">
+                                    <h2 class="text-xl md:text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                                        <span>👥</span> Team 团队账号库
+                                    </h2>
+                                    <button @click="fetchTeamAccounts(true)" class="p-1.5 bg-white border border-slate-200 text-slate-500 rounded-lg hover:bg-slate-50 active:scale-95 transition-all shadow-sm" title="刷新列表">🔄</button>
+                                </div>
+
+                                <div class="flex flex-wrap gap-3 items-center w-full xl:w-auto">
+                                    <label v-if="config && config.team_mode" class="relative inline-flex items-center cursor-pointer group bg-white px-3 py-1.5 rounded-xl border border-emerald-200 shadow-sm mr-2 hover:bg-emerald-50 transition-colors">
+                                        <input type="checkbox" v-model="config.team_mode.enable" @change="saveConfig" class="sr-only peer">
+                                        <div class="relative w-11 h-6 shrink-0 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 shadow-inner group-hover:shadow-md"></div>
+                                        <span class="ml-2 text-xs font-black text-emerald-700 tracking-wide">启用团队配合注册</span>
+                                    </label>
+
+                                    <button @click="showImportTeamModal = true" class="text-sm bg-sky-50 text-sky-600 border border-sky-200 px-3 py-1.5 rounded-lg hover:bg-sky-100 active:scale-95 transition shadow-sm font-bold flex items-center gap-1">
+                                        📥 导入数据
+                                    </button>
+                                    <button @click="showTeamsPlaintext = !showTeamsPlaintext" class="text-sm bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-50 active:scale-95 transition shadow-sm font-bold flex items-center gap-1">
+                                        <span>{{ showTeamsPlaintext ? '🙈' : '👁️' }}</span> {{ showTeamsPlaintext ? '脱敏' : '明文' }}
+                                    </button>
+                                    <div class="flex items-center gap-2 ml-auto xl:ml-2 border-l border-slate-200 pl-3">
+                                        <button @click="clearAllTeamAccounts" class="px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 text-sm font-bold rounded-lg hover:bg-rose-100 transition flex items-center gap-1">🗑️ 清空库</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="overflow-x-auto w-full min-h-[400px]">
+                                <table class="min-w-full divide-y divide-slate-100">
+                                    <thead class="bg-slate-50/80">
+                                        <tr>
+                                            <th class="px-5 md:px-8 py-4 text-left text-[11px] font-black text-slate-400 uppercase tracking-widest w-16">#</th>
+                                            <th class="px-5 md:px-8 py-4 text-left text-[11px] font-black text-slate-400 uppercase tracking-widest">解析邮箱</th>
+                                            <th class="px-5 md:px-8 py-4 text-left text-[11px] font-black text-slate-400 uppercase tracking-widest">Access Token</th>
+                                            <th class="px-5 md:px-8 py-4 text-center text-[11px] font-black text-slate-400 uppercase tracking-widest min-w-[120px]">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-slate-50">
+                                        <tr v-if="teamAccounts.length === 0">
+                                            <td colspan="4" class="px-6 py-16 text-center text-slate-400 font-medium bg-slate-50/30">暂无 Team 库数据，请点击右上角导入</td>
+                                        </tr>
+                                        <tr v-for="(team, index) in teamAccounts" :key="index" class="hover:bg-slate-50 transition duration-200">
+                                            <td class="px-5 md:px-8 py-4 whitespace-nowrap text-sm text-slate-400 font-mono font-medium">{{ index + 1 }}</td>
+                                            <td class="px-5 md:px-8 py-4 whitespace-nowrap text-sm font-bold text-slate-700">
+                                                {{ showTeamsPlaintext ? team.email : maskEmail(team.email) }}
+                                            </td>
+                                            <td class="px-5 md:px-8 py-4 text-xs font-mono text-slate-500 truncate max-w-[200px]" :title="team.access_token">
+                                                {{ showTeamsPlaintext ? team.access_token : 'eyJhbGciOi...' }}
+                                            </td>
+                                            <td class="px-5 md:px-8 py-4 whitespace-nowrap text-center">
+                                                <button @click="deleteSingleTeam(team.id)" class="inline-flex items-center px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-lg text-xs font-bold transition-colors shadow-sm active:scale-95">🗑️ 删除</button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
 
                         <div v-show="currentTab === 'relay'" v-if="config" class="space-y-5 md:space-y-8">
                             <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 border border-slate-200/60 border-t-8 border-t-emerald-500 bg-gradient-to-br from-emerald-50/20 to-white" v-if="config.cpa_mode">
                                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 md:mb-8 border-b border-slate-100 pb-5 gap-4">
-                                    <h3 class="text-xl md:text-2xl font-black text-emerald-700 tracking-tight flex items-center gap-2"><span>📦</span> CPA 仓管中心</h3>
+                                    <h3 class="text-xl md:text-2xl font-black text-emerald-700 tracking-tight flex items-center gap-2"><span>📦</span> CPA 仓管中心
+                                        <a href="https://github.com/router-for-me/CLIProxyAPI" target="_blank" rel="noopener noreferrer" class="text-[10px] md:text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-bold px-2 py-1 rounded-md sm:ml-2 transition-colors inline-flex items-center gap-1 border border-emerald-200/60 shadow-sm">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                                                前往项目地址
+                                        </a>
+                                    </h3>
                                     <div class="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
                                         <button @click="startManualCheck" :disabled="isRunning" class="w-full sm:w-auto px-5 py-2.5 md:py-3 bg-white border-2 border-emerald-500 text-emerald-600 text-sm font-black rounded-xl hover:bg-emerald-50 active:scale-95 transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50">
                                             <span v-if="!isRunning" class="text-base">▶️</span>
@@ -2811,7 +3154,12 @@
                             <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 border border-slate-200/60 border-t-8 border-t-purple-500 bg-gradient-to-br from-purple-50/20 to-white" v-if="config.sub2api_mode">
                                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 md:mb-8 border-b border-slate-100 pb-5 gap-4">
                                     <div>
-                                        <h3 class="text-xl md:text-2xl font-black text-purple-700 tracking-tight flex items-center gap-2"><span>🛸</span> Sub2API 仓管</h3>
+                                        <h3 class="text-xl md:text-2xl font-black text-purple-700 tracking-tight flex items-center gap-2"><span>🛸</span> Sub2API 仓管
+                                            <a href="https://github.com/Wei-Shaw/sub2api" target="_blank" rel="noopener noreferrer" class="text-[10px] md:text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 font-bold px-2 py-1 rounded-md sm:ml-2 transition-colors inline-flex items-center gap-1 border border-purple-200/60 shadow-sm">
+                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                                                    前往项目地址
+                                            </a>
+                                        </h3>
                                     </div>
                                     <div class="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
                                         <button @click="startManualCheck" :disabled="isRunning" class="w-full sm:w-auto px-5 py-2.5 md:py-3 bg-white border-2 border-cyan-500 text-cyan-600 text-sm font-black rounded-xl hover:bg-cyan-50 active:scale-95 transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50">
@@ -3002,6 +3350,66 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 border border-slate-200/60 border-t-8 border-t-blue-500 bg-gradient-to-br from-blue-50/20 to-white" v-if="config.image2api_mode">
+                                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 md:mb-8 border-b border-slate-100 pb-5 gap-4">
+                                    <div>
+                                        <h3 class="text-xl md:text-2xl font-black text-blue-700 tracking-tight flex items-center gap-2"><span>🖼️</span> image2api 仓管
+                                            <a href="https://github.com/basketikun/chatgpt2api" target="_blank" rel="noopener noreferrer" class="text-[10px] md:text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold px-2 py-1 rounded-md sm:ml-2 transition-colors inline-flex items-center gap-1 border border-blue-200/60 shadow-sm">
+                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                                                    前往项目地址
+                                            </a>
+                                        </h3>
+                                    </div>
+                                    <div class="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                                        <label class="relative inline-flex bg-white px-4 py-2.5 md:px-5 md:py-3 rounded-xl cursor-pointer hover:bg-blue-50 transition-colors shadow-sm border border-blue-200 w-full sm:w-auto items-center justify-center group">
+                                            <input type="checkbox" v-model="config.image2api_mode.enable" class="sr-only peer">
+                                            <div class="relative w-11 h-6 shrink-0 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all after:shadow-sm peer-checked:bg-blue-600 shadow-inner transition-colors duration-300 group-hover:shadow-md"></div>
+                                            <span class="font-black text-blue-900 text-sm md:text-base ml-3 tracking-wide">主开关：开启 image2api</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 gap-6 md:gap-8" :class="{'opacity-50 pointer-events-none grayscale-[50%] transition-opacity duration-300': !config.image2api_mode.enable}">
+                                    <div class="col-span-1 space-y-5 bg-slate-50/80 p-5 md:p-6 rounded-2xl border border-slate-200 shadow-inner">
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                            <div>
+                                                <label class="block text-slate-700 text-xs font-extrabold mb-2 uppercase tracking-wider">image2api 接口地址 (URL)</label>
+                                                <div class="relative">
+                                                    <input v-if="!showPwd.image2api_url" readonly :value="maskValue(config.image2api_mode.api_url)"
+                                                           class="w-full appearance-none bg-white border border-blue-200 text-slate-700 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors shadow-sm text-sm"
+                                                           placeholder="https://api.example.com">
+
+                                                    <input v-else type="text" v-model="config.image2api_mode.api_url" autocomplete="off"
+                                                           class="w-full appearance-none bg-white border border-blue-200 text-slate-700 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors shadow-sm text-sm"
+                                                           placeholder="https://api.example.com">
+
+                                                    <button @click="showPwd.image2api_url = !showPwd.image2api_url" class="absolute right-3 top-1/2 -translate-y-1/2 text-lg text-slate-400 hover:text-blue-500">
+                                                        {{ showPwd.image2api_url ? '👁️' : '🙈' }}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label class="block text-slate-700 text-xs font-extrabold mb-2 uppercase tracking-wider">Auth Key (凭证)</label>
+                                                <div class="relative">
+                                                    <input :type="showPwd.image2api_key ? 'text' : 'password'" v-model="config.image2api_mode.api_key" class="w-full appearance-none bg-white border border-blue-200 text-slate-700 rounded-xl py-3 px-4 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors shadow-sm font-mono text-sm" placeholder="sk-xxxxxxxxxx">
+                                                    <button @click="showPwd.image2api_key = !showPwd.image2api_key" class="absolute right-4 top-1/2 -translate-y-1/2 text-lg text-slate-400 hover:text-blue-600 focus:outline-none transition-transform hover:scale-110">
+                                                        {{ showPwd.image2api_key ? '👁️' : '🙈' }}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="md:col-span-2 mt-1 border-t border-slate-100 pt-4">
+                                                <label class="relative inline-flex items-center cursor-pointer group w-full sm:w-auto">
+                                                    <input type="checkbox" v-model="config.image2api_mode.retain_reg_only" class="sr-only peer">
+                                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500 shadow-inner group-hover:shadow-md"></div>
+                                                    <span class="ml-3 text-sm font-bold text-slate-700 group-hover:text-blue-600 transition-colors">同步备份到账号库</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                         </div>
                         <div v-show="currentTab === 'notify'" v-if="config" class="space-y-5 md:space-y-8">
                             <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 border border-slate-200/60 border-t-8 border-t-sky-400 lg:max-w-3xl">
@@ -3031,7 +3439,16 @@
                                                     {{ showPwd.tg_chatid ? '👁️' : '🙈' }}
                                                 </button>
                                             </div>
-                                            <p class="text-[11px] text-sky-600/80 mt-2 font-medium bg-sky-50/50 p-2 rounded inline-block">* 系统在推送消息时会自动走全局配置里的网络代理</p>
+                                            <div class="flex items-center justify-between mt-3">
+                                                <p class="text-[11px] text-sky-600/80 font-medium bg-sky-50/50 p-2 rounded inline-block">* 系统在推送消息时会自动走全局配置里的网络代理</p>
+
+                                                <button @click="testTgNotification" :disabled="isTestingTg || !config.tg_bot.token || !config.tg_bot.chat_id"
+                                                        class="px-4 py-1.5 bg-sky-100 text-sky-700 border border-sky-200 rounded-lg text-xs font-bold shadow-sm hover:bg-sky-200 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+                                                    <span v-if="isTestingTg" class="animate-spin text-sm">⏳</span>
+                                                    <span v-else class="text-sm">🔔</span>
+                                                    {{ isTestingTg ? '发送中...' : '发送测试通知' }}
+                                                </button>
+                                            </div>
                                         </div>
                                         <div class="mt-4 border-t border-sky-200/60 pt-6">
                                             <div class="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 gap-4">
@@ -3063,7 +3480,7 @@
                                             <label class="block text-rose-700 text-sm font-black uppercase tracking-wider mb-4 flex items-center gap-1.5"><span class="text-lg">🛑</span> 运行总结/停止通知模板</label>
                                             <textarea v-model="config.tg_bot.template_stop" class="w-full appearance-none bg-white border-2 border-rose-100 text-slate-700 rounded-xl py-3 px-4 focus:outline-none focus:ring-0 focus:border-rose-400 transition-colors shadow-inner text-xs font-mono h-28 md:h-32 leading-relaxed placeholder:text-slate-300" placeholder="填入总结模板"></textarea>
                                             <div class="text-[11px] text-rose-700/80 mt-2 font-medium bg-rose-50/80 p-3 rounded-lg border border-rose-100/50 leading-relaxed break-words">
-                                                可用变量: <code class="bg-white px-1 py-0.5 rounded shadow-sm font-bold text-rose-600 mx-0.5">{success_rate}</code> 成功率, <code class="bg-white px-1 py-0.5 rounded shadow-sm font-bold text-rose-600 mx-0.5">{success}</code> 成功数, <code class="bg-white px-1 py-0.5 rounded shadow-sm font-bold text-rose-600 mx-0.5">{target}</code> 目标数, <code class="bg-white px-1 py-0.5 rounded shadow-sm font-bold text-rose-600 mx-0.5">{failed}</code> 失败数, <code class="bg-white px-1 py-0.5 rounded shadow-sm font-bold text-rose-600 mx-0.5">{retries}</code> 拦截数, <code class="bg-white px-1 py-0.5 rounded shadow-sm font-bold text-rose-600 mx-0.5">{pwd_blocked}</code> 密码受阻, <code class="bg-white px-1 py-0.5 rounded shadow-sm font-bold text-rose-600 mx-0.5">{phone_verify}</code> 出现手机, <code class="bg-white px-1 py-0.5 rounded shadow-sm font-bold text-rose-600 mx-0.5">{elapsed_time}</code> 总耗时, <code class="bg-white px-1 py-0.5 rounded shadow-sm font-bold text-rose-600 mx-0.5">{avg_time}</code> 平均耗时。
+                                                可用变量: <code class="bg-white px-1 py-0.5 rounded shadow-sm font-bold text-rose-600 mx-0.5">{success_rate}</code> 成功率, <code class="bg-white px-1 py-0.5 rounded shadow-sm font-bold text-rose-600 mx-0.5">{success}</code> 成功数, <code class="bg-white px-1 py-0.5 rounded shadow-sm font-bold text-rose-600 mx-0.5">{target}</code> 目标数, <code class="bg-white px-1 py-0.5 rounded shadow-sm font-bold text-rose-600 mx-0.5">{failed}</code> 失败数, <code class="bg-white px-1 py-0.5 rounded shadow-sm font-bold text-rose-600 mx-0.5">{retries}</code> 拦截数, <code class="bg-white px-1 py-0.5 rounded shadow-sm font-bold text-rose-600 mx-0.5">{pwd_blocked}</code> 密码受阻, <code class="bg-white px-1 py-0.5 rounded shadow-sm font-bold text-rose-600 mx-0.5">{phone_verify}</code> 出现手机, <code class="bg-white px-1 py-0.5 rounded shadow-sm font-bold text-rose-600 mx-0.5">{sms_codes}</code> 接码成功, <code class="bg-white px-1 py-0.5 rounded shadow-sm font-bold text-rose-600 mx-0.5">{elapsed_time}</code> 总耗时, <code class="bg-white px-1 py-0.5 rounded shadow-sm font-bold text-rose-600 mx-0.5">{avg_time}</code> 平均耗时。
                                             </div>
                                         </div>
                                     </div>
@@ -3187,7 +3604,38 @@
                                     <input type="number" v-model.number="config.max_otp_retries" class="w-24 appearance-none bg-slate-50 border border-slate-200 text-slate-800 font-bold rounded-lg py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors shadow-inner text-center">
                                 </div>
                             </div>
+                            <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 border border-slate-200/60 border-t-8 border-t-emerald-500 bg-gradient-to-br from-emerald-50/10 to-white lg:col-span-2">
+                                <h3 class="text-lg md:text-xl font-black text-emerald-700 mb-6 flex items-center gap-2 tracking-tight">
+                                    <span>🛡️</span> 云端授权管理控制台
+                                    <span class="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200 shadow-sm ml-2">容器部署必备</span>
+                                </h3>
 
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 items-stretch">
+                                    <div class="bg-emerald-50/50 p-5 md:p-6 rounded-2xl border border-emerald-200/60 shadow-inner flex flex-col justify-center">
+                                        <label class="block text-emerald-800 text-xs font-black uppercase tracking-wider mb-3">请加入官方群获取授权凭证后，上传 wenfxl.license 然后左下角重启项目</label>
+                                        <div class="flex flex-col xl:flex-row gap-3 mt-auto">
+                                            <input type="file" id="licenseFileInput" accept=".license,.txt,application/octet-stream,text/plain"
+                                                   class="flex-1 appearance-none bg-white border border-emerald-200 text-slate-700 rounded-xl py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors shadow-sm text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-emerald-100 file:text-emerald-700 hover:file:bg-emerald-200 cursor-pointer">
+                                            <button @click="uploadLicenseFile"
+                                                    class="px-5 py-2.5 bg-emerald-600 text-white text-sm font-black rounded-xl hover:bg-emerald-700 active:scale-95 transition-all shadow-md shadow-emerald-500/30 whitespace-nowrap flex items-center justify-center gap-2">
+                                                <span>📤</span> 确认上传
+                                            </button>
+                                        </div>
+                                        <p class="text-[11px] text-emerald-600/80 mt-3 font-medium">支持上传 .license 授权文件，自动保存至 MySQL/SQLite 系统库。</p>
+                                    </div>
+
+                                    <div class="bg-rose-50/50 p-5 md:p-6 rounded-2xl border border-rose-200/60 shadow-inner flex flex-col justify-center">
+                                        <label class="block text-rose-800 text-xs font-black uppercase tracking-wider mb-3">授权与设备状态重置</label>
+                                        <div class="mt-auto">
+                                            <button @click="authResetModal.show = true"
+                                                    class="w-full px-6 py-3 md:py-3.5 bg-white border-2 border-rose-200 text-rose-600 text-sm font-black rounded-xl hover:bg-rose-50 active:scale-95 transition-all shadow-sm flex items-center justify-center gap-2 group">
+                                                <span class="group-hover:rotate-12 transition-transform text-lg">⚠️</span> 一键重置系统授权与设备绑定
+                                            </button>
+                                        </div>
+                                        <p class="text-[11px] text-rose-500/80 mt-3 font-medium">如果连数据库一起迁移新机，那么首次运行时，一定要在这里清理数据库旧机器码与租约数据。可以不清理(License)。</p>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 border border-slate-200/60 border-t-8 border-t-blue-500 bg-gradient-to-br from-blue-50/20 to-white lg:col-span-2" v-if="config.normal_mode">
                                 <h3 class="text-lg md:text-xl font-black text-blue-700 mb-6 flex items-center gap-2 tracking-tight pb-4 border-b border-blue-100"><span>⚙️</span> 常规量产模式边界控制</h3>
                                 <div class="flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-stretch">
@@ -3221,6 +3669,23 @@
                                         </label>
                                     </div>
                                 </div>
+                                <div class="col-span-2 md:col-span-1 bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-all group">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex flex-col gap-1">
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-xs font-black text-slate-700 uppercase tracking-widest">保存 IMG 账号到本地</span>
+                                                <span class="px-1.5 py-0.5 rounded bg-blue-50 text-[10px] text-blue-500 font-bold border border-blue-100">常规模式专属</span>
+                                            </div>
+                                            <p class="text-[11px] text-slate-400 font-medium leading-relaxed max-w-[240px]">
+                                                开启后，常规模式注册成功会自动将 image2api 凭证写入本地数据库。
+                                            </p>
+                                        </div>
+                                        <label class="relative inline-flex items-center cursor-pointer">
+                                            <input type="checkbox" v-model="config.normal_mode.save_img_to_local" @change="saveConfig" class="sr-only peer">
+                                            <div class="relative w-11 h-6 shrink-0 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 shadow-inner group-hover:shadow-md transition-all duration-300"></div>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -3228,68 +3693,115 @@
                 </div>
             </main>
         </div>
-     <div v-if="outlookAuth && outlookAuth.showModal" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col border border-slate-200">
-        <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-            <h3 class="text-lg font-black text-slate-800 flex items-center gap-2">
-                <span>🔑</span> 为账号授权 (OAuth 2.0)
-            </h3>
-            <button @click="outlookAuth.showModal = false" class="text-slate-400 hover:text-rose-500 focus:outline-none transition-colors">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-            </button>
-        </div>
-
-        <div class="p-6 space-y-6">
-            <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex items-center justify-between shadow-sm">
-                <span class="text-xs font-bold text-indigo-700 uppercase tracking-wider">正在授权账号</span>
-                <span class="text-base font-mono font-black text-indigo-900">{{ outlookAuth.mailbox?.email }}</span>
-            </div>
-
-            <div class="space-y-3">
-                <div class="flex items-center gap-2">
-                    <div class="w-6 h-6 rounded-full bg-slate-800 text-white flex items-center justify-center text-xs font-bold shadow-sm">1</div>
-                    <span class="text-sm font-bold text-slate-800">获取并在浏览器中打开授权链接</span>
-                </div>
-                <div v-if="!outlookAuth.authUrl">
-                    <button @click="generateOutlookAuthUrl" :disabled="outlookAuth.isGenerating" class="w-full py-3 bg-white hover:bg-slate-50 text-slate-700 border-2 border-slate-200 rounded-xl font-bold text-sm transition-all shadow-sm active:scale-[0.98] disabled:opacity-50 flex justify-center items-center gap-2">
-                        <span v-if="outlookAuth.isGenerating" class="animate-spin">🔄</span>
-                        {{ outlookAuth.isGenerating ? '生成中...' : '👉 点击生成专属授权链接' }}
+        <div v-if="outlookAuth && outlookAuth.showModal" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col border border-slate-200">
+                <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h3 class="text-lg font-black text-slate-800 flex items-center gap-2">
+                        <span>🔑</span> 为账号授权 (OAuth 2.0)
+                    </h3>
+                    <button @click="outlookAuth.showModal = false" class="text-slate-400 hover:text-rose-500 focus:outline-none transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                     </button>
                 </div>
-                <div v-else class="relative animate-fade-in">
-                    <textarea readonly class="w-full h-24 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-600 focus:outline-none resize-none shadow-inner">{{ outlookAuth.authUrl }}</textarea>
-                    <a :href="outlookAuth.authUrl" target="_blank" class="absolute bottom-3 right-3 px-4 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors shadow-md flex items-center gap-1">
-                        在浏览器中打开 ↗
-                    </a>
+
+                <div class="p-6 space-y-6">
+                    <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex items-center justify-between shadow-sm">
+                        <span class="text-xs font-bold text-indigo-700 uppercase tracking-wider">正在授权账号</span>
+                        <span class="text-base font-mono font-black text-indigo-900">{{ outlookAuth.mailbox?.email }}</span>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div class="flex items-center gap-2">
+                            <div class="w-6 h-6 rounded-full bg-slate-800 text-white flex items-center justify-center text-xs font-bold shadow-sm">1</div>
+                            <span class="text-sm font-bold text-slate-800">获取并在浏览器中打开授权链接</span>
+                        </div>
+                        <div v-if="!outlookAuth.authUrl">
+                            <button @click="generateOutlookAuthUrl" :disabled="outlookAuth.isGenerating" class="w-full py-3 bg-white hover:bg-slate-50 text-slate-700 border-2 border-slate-200 rounded-xl font-bold text-sm transition-all shadow-sm active:scale-[0.98] disabled:opacity-50 flex justify-center items-center gap-2">
+                                <span v-if="outlookAuth.isGenerating" class="animate-spin">🔄</span>
+                                {{ outlookAuth.isGenerating ? '生成中...' : '👉 点击生成专属授权链接' }}
+                            </button>
+                        </div>
+                        <div v-else class="relative animate-fade-in">
+                            <textarea readonly class="w-full h-24 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-600 focus:outline-none resize-none shadow-inner">{{ outlookAuth.authUrl }}</textarea>
+                            <a :href="outlookAuth.authUrl" target="_blank" class="absolute bottom-3 right-3 px-4 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors shadow-md flex items-center gap-1">
+                                在浏览器中打开 ↗
+                            </a>
+                        </div>
+                        <div class="bg-amber-50 border border-amber-200 p-3 rounded-lg flex items-start gap-2 ml-8 shadow-sm">
+                            <span class="text-amber-500 mt-0.5">💡</span>
+                            <p class="text-[11px] text-amber-800 font-medium leading-relaxed">
+                                请确保在浏览器中登录的是上方指定的邮箱账号。授权后浏览器会跳转到一个<span class="text-rose-600 font-bold">无法访问的错误页面</span>，这是正常的！
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div class="flex items-center gap-2">
+                            <div class="w-6 h-6 rounded-full bg-slate-800 text-white flex items-center justify-center text-xs font-bold shadow-sm">2</div>
+                            <span class="text-sm font-bold text-slate-800">粘贴回传网址换取 Token</span>
+                        </div>
+                        <div class="ml-8">
+                            <input type="text" v-model="outlookAuth.pastedUrl" placeholder="请将跳转后浏览器地址栏的网址完整粘贴到这里" class="w-full bg-white border-2 border-slate-200 text-slate-800 rounded-xl py-3 px-4 focus:outline-none focus:ring-0 focus:border-indigo-500 text-sm font-mono shadow-sm transition-colors">
+                        </div>
+                    </div>
                 </div>
-                <div class="bg-amber-50 border border-amber-200 p-3 rounded-lg flex items-start gap-2 ml-8 shadow-sm">
-                    <span class="text-amber-500 mt-0.5">💡</span>
-                    <p class="text-[11px] text-amber-800 font-medium leading-relaxed">
-                        请确保在浏览器中登录的是上方指定的邮箱账号。授权后浏览器会跳转到一个<span class="text-rose-600 font-bold">无法访问的错误页面</span>，这是正常的！
+
+                <div class="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+                    <button @click="outlookAuth.showModal = false" class="px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-100 transition-colors shadow-sm active:scale-95">取消</button>
+                    <button @click="submitOutlookAuthCode" :disabled="outlookAuth.isLoading || !outlookAuth.pastedUrl" class="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-md hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 active:scale-95">
+                        <span v-if="outlookAuth.isLoading" class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
+                        确认换取并保存 Token
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div v-if="authResetModal.show" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col border border-slate-200 transform transition-all">
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                    <h3 class="text-lg font-black text-rose-600 flex items-center gap-2">
+                        <span>⚠️</span> 一键重置授权
+                    </h3>
+                    <button @click="authResetModal.show = false" class="text-slate-400 hover:text-rose-500 transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+
+                <div class="p-6">
+                    <p class="text-sm text-slate-600 mb-6 font-medium bg-rose-50 p-3 rounded-lg border border-rose-100">
+                        请勾选需要从数据库彻底清除的凭据数据：
                     </p>
-                </div>
-            </div>
 
-            <div class="space-y-3">
-                <div class="flex items-center gap-2">
-                    <div class="w-6 h-6 rounded-full bg-slate-800 text-white flex items-center justify-center text-xs font-bold shadow-sm">2</div>
-                    <span class="text-sm font-bold text-slate-800">粘贴回传网址换取 Token</span>
+                    <div class="space-y-4">
+                        <label class="flex items-start gap-3 cursor-pointer group">
+                            <input type="checkbox" v-model="authResetModal.clearLicense" class="mt-0.5 w-4 h-4 text-rose-600 border-slate-300 rounded focus:ring-rose-500 transition-all">
+                            <div>
+                                <span class="block text-sm font-bold text-slate-800 group-hover:text-rose-600 transition-colors">清除授权文件 (License)</span>
+                                <span class="block text-xs text-slate-500 mt-0.5">清空上传的卡密凭证内容</span>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-3 cursor-pointer group">
+                            <input type="checkbox" v-model="authResetModal.clearHwid" class="mt-0.5 w-4 h-4 text-rose-600 border-slate-300 rounded focus:ring-rose-500 transition-all">
+                            <div>
+                                <span class="block text-sm font-bold text-slate-800 group-hover:text-rose-600 transition-colors">清除机器码 (HWID)</span>
+                                <span class="block text-xs text-slate-500 mt-0.5">清空当前生成的设备硬件特征码</span>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-3 cursor-pointer group">
+                            <input type="checkbox" v-model="authResetModal.clearLease" class="mt-0.5 w-4 h-4 text-rose-600 border-slate-300 rounded focus:ring-rose-500 transition-all">
+                            <div>
+                                <span class="block text-sm font-bold text-slate-800 group-hover:text-rose-600 transition-colors">清除租约数据 (Lease)</span>
+                                <span class="block text-xs text-slate-500 mt-0.5">清空与服务端通讯的Token</span>
+                            </div>
+                        </label>
+                    </div>
                 </div>
-                <div class="ml-8">
-                    <input type="text" v-model="outlookAuth.pastedUrl" placeholder="请将跳转后浏览器地址栏的网址完整粘贴到这里" class="w-full bg-white border-2 border-slate-200 text-slate-800 rounded-xl py-3 px-4 focus:outline-none focus:ring-0 focus:border-indigo-500 text-sm font-mono shadow-sm transition-colors">
+
+                <div class="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+                    <button @click="authResetModal.show = false" class="px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-100 transition-colors shadow-sm active:scale-95">取消</button>
+                    <button @click="submitAuthReset" class="px-5 py-2.5 bg-rose-500 text-white rounded-xl text-sm font-bold shadow-md hover:bg-rose-600 transition-all active:scale-95">确认清除</button>
                 </div>
             </div>
         </div>
-
-        <div class="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-            <button @click="outlookAuth.showModal = false" class="px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-100 transition-colors shadow-sm active:scale-95">取消</button>
-            <button @click="submitOutlookAuthCode" :disabled="outlookAuth.isLoading || !outlookAuth.pastedUrl" class="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-md hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 active:scale-95">
-                <span v-if="outlookAuth.isLoading" class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
-                确认换取并保存 Token
-            </button>
-        </div>
-    </div>
-</div>
     </div>
     <script>
         (function () {

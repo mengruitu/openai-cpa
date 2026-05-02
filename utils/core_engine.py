@@ -48,7 +48,8 @@ run_stats = {
     "start_time": 0,
     "target": 0,
     "pwd_blocked": 0,
-    "phone_verify": 0
+    "phone_verify": 0,
+    "sms_codes": 0
 }
 KNOWN_CLIPROXY_ERROR_LABELS = {
     "usage_limit_reached":  "周限额已耗尽",
@@ -106,6 +107,12 @@ def web_print(*args, **kwargs):
 
 
 builtins.print = web_print
+
+
+def record_sms_code_received(provider: str = "") -> None:
+    """Count every received phone OTP as a billable SMS event."""
+    with _stats_lock:
+        run_stats["sms_codes"] = run_stats.get("sms_codes", 0) + 1
 
 def _load_dotenv(path: str = ".env") -> None:
     if not os.path.exists(path):
@@ -579,15 +586,18 @@ def handle_registration_result(result: Any, cpa_upload: bool = False, run_ctx: d
     global run_stats
 
     last_email = mail_service.get_last_email()
-    if not last_email or "@" not in last_email:
+    account_identifier = str((run_ctx or {}).get("account_identifier") or last_email or "").strip()
+    is_sms_first_account = bool((run_ctx or {}).get("sms_first"))
+    if not account_identifier:
         return "failed"
 
-    if "+" in last_email:
+    if (not is_sms_first_account) and "@" in account_identifier and "+" in account_identifier:
+        last_email = account_identifier
         u_part, d_part = last_email.split("@")
         master_email = f"{u_part.split('+')[0]}@{d_part}"
         is_raw = False
     else:
-        master_email = last_email
+        master_email = account_identifier
         is_raw = True
 
     is_dead = False
@@ -599,14 +609,14 @@ def handle_registration_result(result: Any, cpa_upload: bool = False, run_ctx: d
             with _stats_lock: run_stats["phone_verify"] += 1
             is_dead = True
     signup_blocked = run_ctx.get('signup_blocked', False) if run_ctx else False
-    if (signup_blocked or is_dead) and getattr(cfg, "EMAIL_API_MODE", "") == "local_microsoft":
+    if (not is_sms_first_account) and (signup_blocked or is_dead) and getattr(cfg, "EMAIL_API_MODE", "") == "local_microsoft":
         if getattr(cfg, "LOCAL_MS_POOL_FISSION", False):
             db_manager.update_pool_fission_result(master_email, is_blocked=True, is_raw=is_raw)
         elif not getattr(cfg, "LOCAL_MS_ENABLE_FISSION", False):
             db_manager.update_local_mailbox_status(master_email, 3)
             print(f"[{ts()}] [WARNING] 触发风控，已将主号标记为死号: {mask_email(master_email)}")
 
-    cur_dom = last_email.split("@")[-1] if last_email and "@" in last_email else None
+    cur_dom = account_identifier.split("@")[-1] if account_identifier and "@" in account_identifier else None
 
     token_json_str = None
     password = None
@@ -630,7 +640,7 @@ def handle_registration_result(result: Any, cpa_upload: bool = False, run_ctx: d
     else:
         with _stats_lock: run_stats["success"] += 1
         token_data    = json.loads(token_json_str)
-        account_email = token_data.get("email", "unknown")
+        account_email = account_identifier if is_sms_first_account else token_data.get("email", "unknown")
 
         # 存入本地数据库
         if cpa_upload:
@@ -655,9 +665,9 @@ def handle_registration_result(result: Any, cpa_upload: bool = False, run_ctx: d
             else:
                 print(f"[{ts()}] [ERROR] 云端上传失败: {up_msg}")
 
-        if getattr(cfg, "LOCAL_MS_POOL_FISSION", False) and cfg.EMAIL_API_MODE == "local_microsoft":
+        if (not is_sms_first_account) and getattr(cfg, "LOCAL_MS_POOL_FISSION", False) and cfg.EMAIL_API_MODE == "local_microsoft":
             db_manager.update_pool_fission_result(master_email, is_blocked=False, is_raw=is_raw)
-        elif not getattr(cfg, "LOCAL_MS_ENABLE_FISSION", False) and cfg.EMAIL_API_MODE == "local_microsoft":
+        elif (not is_sms_first_account) and not getattr(cfg, "LOCAL_MS_ENABLE_FISSION", False) and cfg.EMAIL_API_MODE == "local_microsoft":
             db_manager.update_local_mailbox_status(master_email, 2)
 
         safe_pwd = str(password) if password else ""

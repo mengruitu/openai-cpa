@@ -1,5 +1,5 @@
 from curl_cffi import requests
-from typing import Optional, Tuple, List, Dict
+from typing import Any, Optional, Tuple, List, Dict
 from utils import config as cfg
 
 class TempMailOrgService:
@@ -41,8 +41,27 @@ class TempMailOrgService:
 
             if r.status_code == 200:
                 data = r.json()
-                return data.get("messages", [])
+                if isinstance(data, dict):
+                    messages = data.get("messages", [])
+                    if isinstance(messages, list):
+                        return messages
+                if isinstance(data, list):
+                    return data
         except Exception as e:
             print(f"[{cfg.ts()}] [ERROR] [TempMail.org] 获取邮件错误: {e}")
 
         return []
+
+    def get_message(self, token: str, msg_id: str) -> Dict[str, Any]:
+        if not token or not msg_id:
+            return {}
+        try:
+            req_headers = {"Cache-Control": "no-cache", "Authorization": f"Bearer {token}"}
+            r = self.session.get(f"{self.BASE_URL}/messages/{msg_id}", headers=req_headers, timeout=30)
+            if r.status_code == 200:
+                data = r.json()
+                return data if isinstance(data, dict) else {}
+            print(f"[{cfg.ts()}] [WARNING] [TempMail.org] 获取邮件详情失败: HTTP {r.status_code} {r.text[:160]}")
+        except Exception as e:
+            print(f"[{cfg.ts()}] [ERROR] [TempMail.org] 获取邮件详情异常: {e}")
+        return {}

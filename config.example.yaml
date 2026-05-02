@@ -5,6 +5,8 @@
 # https://github.com/s12ryt/mail-curl
 
 reg_mode: "protocol"
+# 注册策略: email_first=邮箱优先注册, sms_first=手机号优先注册并直接换 RT
+registration_strategy: "email_first"
 # 可选值: "imap" / "freemail" / "cloudflare_temp_email" / "cloudmail" / "mail_curl" / "luckmail"
 email_api_mode: "cloudflare_temp_email"
 
@@ -195,6 +197,13 @@ raw_proxy_pool:
     - "socks5://user:pass@127.0.0.1:1080"
     - "127.0.0.1:1081:user:pass"
 
+side_proxy_pool:
+  # 旁代理池：只用于邮箱服务、SMS 接码平台取号/轮询；OpenAI 主注册流程不走这里
+  enable: false
+  proxy_list:
+    # - "http://user:pass@127.0.0.1:8080"
+    # - "socks5://user:pass@127.0.0.1:1080"
+
 warp_proxy_list:
   - "http://127.0.0.1:41001"
   - "http://127.0.0.1:41002"
@@ -303,6 +312,8 @@ smsbower:
   base_url: https://smsbower.page/stubs/handler_api.php
   country: 0
   service: dr
+  provider_ids: ""
+  except_provider_ids: ""
   auto_pick_country: false
   verify_on_register: false
   reuse_phone: true

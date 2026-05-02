@@ -77,15 +77,7 @@ def _sanitize_local_microsoft_config(local_ms: Any) -> dict:
 
 @router.get("/")
 async def get_dashboard():
-    version = "1.0.0"
-    js_path = os.path.join(BASE_DIR, "static", "js", "app.js")
-    try:
-        if os.path.exists(js_path):
-            with open(js_path, "r", encoding="utf-8") as f:
-                match = re.search(r"appVersion:\s*['\"]([^'\"]+)['\"]", f.read())
-                if match: version = match.group(1)
-    except Exception:
-        pass
+    version = getattr(cfg, "APP_VERSION", "1.0.0")
 
     html_path = os.path.join(BASE_DIR, "index.html")
     if not os.path.exists(html_path): return HTMLResponse(content="<h1>找不到 index.html</h1>", status_code=404)
@@ -120,7 +112,7 @@ async def start_task(token: str = Depends(verify_token)):
 
     default_proxy = getattr(core_engine.cfg, 'DEFAULT_PROXY', None)
     args = DummyArgs(proxy=default_proxy if default_proxy else None)
-    core_engine.run_stats.update({"success": 0, "failed": 0, "retries": 0, "pwd_blocked": 0, "phone_verify": 0, "start_time": time.time(),"target": 0})
+    core_engine.run_stats.update({"success": 0, "failed": 0, "retries": 0, "pwd_blocked": 0, "phone_verify": 0, "sms_codes": 0, "start_time": time.time(),"target": 0})
     if getattr(core_engine.cfg, 'ENABLE_CPA_MODE', False):
         engine.start_cpa(args)
         return {"status": "success", "message": "启动成功：已自动识别并开启 [CPA 智能仓管模式]"}
@@ -145,11 +137,13 @@ async def stop_task(token: str = Depends(verify_token)):
     template_str = getattr(core_engine.cfg, 'TG_BOT', {}).get("template_stop", "🛑 停止：成功 {success}/{target}")
     pwd_blocked = stats["pwd_blocked"] if stats["pwd_blocked"] > 0 else 0
     phone_blocked = stats["phone_verify"] if stats["phone_verify"] > 0 else 0
+    sms_codes = stats.get("sms_codes", 0)
 
     try:
         msg = template_str.format(success_rate=success_rate, success=stats['success'], target=target_str,
                                   failed=stats['failed'], retries=stats['retries'], elapsed_time=elapsed_time,
-                                  pwd_blocked=pwd_blocked,phone_verify=phone_blocked,avg_time=avg_time)
+                                  pwd_blocked=pwd_blocked, phone_verify=phone_blocked,
+                                  sms_codes=sms_codes, avg_time=avg_time)
     except Exception:
         msg = f"⚠️ TG 模板渲染出错：未知的变量格式。\n请检查配置面板中的模板变量是否正确填写。"
 
@@ -193,6 +187,7 @@ async def get_stats(token: str = Depends(verify_token)):
     return {
         "success": stats["success"], "failed": stats["failed"], "retries": stats["retries"],
         "pwd_blocked": stats.get("pwd_blocked", 0), "phone_verify": stats.get("phone_verify", 0),
+        "sms_codes": stats.get("sms_codes", 0),
         "total": total_attempts, "target": stats["target"] if stats["target"] > 0 else "∞",
         "success_rate": f"{success_rate}%", "elapsed": f"{elapsed}s", "avg_time": f"{avg_time}s",
         "progress_pct": f"{progress_pct}%", "is_running": is_running, "mode": current_mode
@@ -547,7 +542,7 @@ def ext_reset_stats(token: str = Depends(verify_token)):
     import time
     core_engine.run_stats.update({
         "success": 0, "failed": 0, "retries": 0,
-        "pwd_blocked": 0, "phone_verify": 0,
+        "pwd_blocked": 0, "phone_verify": 0, "sms_codes": 0,
         "start_time": time.time(),
         "target": getattr(core_engine.cfg, 'NORMAL_TARGET_COUNT', 0),
         "ext_is_running": True

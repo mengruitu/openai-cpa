@@ -206,13 +206,36 @@ def _get_ai_data_package():
 #     return result
 
 def get_email_and_token(proxies: Any = None) -> tuple:
+    if not (hasattr(cfg, "is_side_proxy_pool_enabled") and cfg.is_side_proxy_pool_enabled()):
+        return _get_email_and_token_once(proxies)
+
+    side_proxy_count = len(getattr(cfg, "SIDE_PROXY_LIST", []) or [])
+    max_attempts = max(1, side_proxy_count)
+    last_email = None
+    last_token = None
+    for attempt in range(1, max_attempts + 1):
+        email, token = _get_email_and_token_once(proxies)
+        if email and token:
+            return email, token
+        last_email, last_token = email, token
+        if attempt < max_attempts:
+            print(f"[{cfg.ts()}] [WARNING] 邮箱创建失败，正在切换旁代理重试 ({attempt + 1}/{max_attempts})...")
+    return last_email, last_token
+
+
+def _get_email_and_token_once(proxies: Any = None) -> tuple:
 # def _raw_get_email_and_token(proxies: Any = None) -> tuple:
     """兼容五种邮箱模式的地址创建，返回 (email, token_or_id)。"""
     if getattr(cfg, 'GLOBAL_STOP', False): return None, None
     _thread_data.last_attempt_email = None
 
     mode = cfg.EMAIL_API_MODE
-    mail_proxies = proxies if cfg.USE_PROXY_FOR_EMAIL else None
+    side_proxies = cfg.get_next_side_proxies() if hasattr(cfg, "get_next_side_proxies") else None
+    if side_proxies:
+        mail_proxies = side_proxies
+        print(f"[{cfg.ts()}] [INFO] 邮箱服务使用旁代理: {mask_email(mail_proxies.get('https') or mail_proxies.get('http') or '')}")
+    else:
+        mail_proxies = proxies if cfg.USE_PROXY_FOR_EMAIL else None
 
     if mode == "mail_curl":
         try:
@@ -733,7 +756,12 @@ def get_oai_code(
 ) -> str:
     """轮询各邮箱服务商收取 OpenAI 验证码，返回 6 位字符串或空串。"""
     mailbox_id = jwt
-    mail_proxies = proxies if cfg.USE_PROXY_FOR_EMAIL else None
+    side_proxies = cfg.get_next_side_proxies() if hasattr(cfg, "get_next_side_proxies") else None
+    if side_proxies:
+        mail_proxies = side_proxies
+        print(f"[{cfg.ts()}] [INFO] 邮箱取码使用旁代理: {mask_email(mail_proxies.get('https') or mail_proxies.get('http') or '')}")
+    else:
+        mail_proxies = proxies if cfg.USE_PROXY_FOR_EMAIL else None
     proxy_str = None
     if mail_proxies:
         if isinstance(mail_proxies, dict):
@@ -1346,15 +1374,29 @@ def get_oai_code(
                     from utils.email_providers.tempmail_org import TempMailOrgService
                     tm_org = TempMailOrgService(proxies=mail_proxies)
                     email_list = tm_org.get_inbox(jwt)
+                    if email_list and attempt in (0, 1, 4, 9):
+                        print(f"[{cfg.ts()}] [INFO] TempMail.org ({mask_email(email)}) 当前邮件数: {len(email_list)}")
 
                     for msg in email_list:
                         msg_id = str(msg.get("_id", msg.get("id", "")))
                         if not msg_id or msg_id in processed_mail_ids:
                             continue
 
-                        subject = str(msg.get("subject", ""))
-                        bodyPreview = str(msg.get("bodyPreview", ""))
-                        content = "\n".join([subject, bodyPreview])
+                        detail = tm_org.get_message(jwt, msg_id)
+                        subject = str(detail.get("subject") or msg.get("subject", ""))
+                        content_parts = [
+                            str(msg.get("from", "")),
+                            str(msg.get("sender", "")),
+                            subject,
+                            str(msg.get("bodyPreview", "")),
+                            str(detail.get("bodyPreview", "")),
+                            str(detail.get("bodyText", "")),
+                            str(detail.get("bodyHtml", "")),
+                            str(detail.get("body", "")),
+                            str(detail.get("html", "")),
+                            str(detail.get("text", "")),
+                        ]
+                        content = re.sub(r"<[^>]+>", " ", "\n".join(content_parts))
                         code = ""
                         m = re.search(r"(?<!\d)(\d{6})(?!\d)", content)
                         if m:

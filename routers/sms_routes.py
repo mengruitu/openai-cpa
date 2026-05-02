@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+from typing import Optional
 from pydantic import BaseModel
 from global_state import verify_token
 from utils import core_engine
@@ -7,6 +8,8 @@ router = APIRouter()
 
 class SMSPriceReq(BaseModel):
     service: str = "openai"
+    provider_ids: Optional[str] = None
+    except_provider_ids: Optional[str] = None
 
 @router.get('/api/sms/balance')
 def api_get_sms_balance(token: str = Depends(verify_token)):
@@ -34,8 +37,27 @@ def api_get_smsbower_balance(api_key: str = Query(None), token: str = Depends(ve
 def api_get_smsbower_prices(req: SMSPriceReq, token: str = Depends(verify_token)):
     from utils.integrations.smsbower_sms import _smsbower_prices_by_service
     proxy_url = getattr(core_engine.cfg, 'DEFAULT_PROXY', None)
-    rows = _smsbower_prices_by_service(req.service, proxies={"http": proxy_url, "https": proxy_url} if proxy_url else None, force_refresh=False)
+    rows = _smsbower_prices_by_service(
+        req.service,
+        proxies={"http": proxy_url, "https": proxy_url} if proxy_url else None,
+        force_refresh=False,
+        provider_ids=req.provider_ids,
+        except_provider_ids=req.except_provider_ids,
+    )
     return {"status": "success", "prices": rows} if rows else {"status": "error", "message": "无法获取价格或当前服务无库存"}
+
+@router.post('/api/smsbower/provider_price')
+def api_get_smsbower_provider_price(req: SMSPriceReq, token: str = Depends(verify_token)):
+    from utils.integrations.smsbower_sms import _smsbower_prices_by_service
+    proxy_url = getattr(core_engine.cfg, 'DEFAULT_PROXY', None)
+    rows = _smsbower_prices_by_service(
+        req.service,
+        proxies={"http": proxy_url, "https": proxy_url} if proxy_url else None,
+        force_refresh=True,
+        provider_ids=req.provider_ids,
+        except_provider_ids="",
+    )
+    return {"status": "success", "prices": rows} if rows else {"status": "error", "message": "该提供商暂无库存或无法获取报价"}
 
 @router.get('/api/fivesim/balance')
 def api_get_fivesim_balance(token: str = Depends(verify_token)):
