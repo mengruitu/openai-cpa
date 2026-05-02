@@ -1,6 +1,8 @@
-import os
+import html
+import json
 import time
 import random
+import re
 import threading
 from typing import Any, Dict, List, Optional
 from curl_cffi import requests
@@ -129,6 +131,8 @@ _SMSBOWER_PRICE_CACHE_LOCK = threading.Lock()
 _SMSBOWER_PRICE_CACHE: dict[str, Any] = {"service": "", "updated_at": 0.0, "items": []}
 _SMSBOWER_COUNTRY_NAME_CACHE: Dict[int, str] = {}
 _SMSBOWER_COUNTRY_NAMES_MAP: dict[int, str] = {}
+_SMSBOWER_PROVIDER_MAP: dict[int, list[dict[str, Any]]] = {}
+_SMSBOWER_PROVIDER_PRICE_CACHE: dict[str, Any] = {"service": "", "updated_at": 0.0, "items": {}}
 
 _OPENAI_SMS_BLOCKED_COUNTRY_IDS = {0, 3, 14, 20, 51, 57, 110, 113, 191}
 
@@ -370,6 +374,66 @@ def _get_country_names_map(proxies: Any) -> dict[int, str]:
     return _SMSBOWER_COUNTRY_NAMES_MAP
 
 
+def _get_provider_map(proxies: Any) -> dict[int, list[dict[str, Any]]]:
+    global _SMSBOWER_PROVIDER_MAP
+    if _SMSBOWER_PROVIDER_MAP:
+        return _SMSBOWER_PROVIDER_MAP
+
+    _info("正在同步 SmsBower 国家提供商列表...")
+    try:
+        resp = requests.get(
+            "https://smsbower.app/api/?page=client",
+            proxies=proxies,
+            verify=_ssl_verify(),
+            timeout=25,
+            impersonate="chrome131",
+        )
+        text = str(getattr(resp, "text", "") or "")
+    except Exception as e:
+        _warn(f"SmsBower 提供商列表同步失败: {e}")
+        return {}
+
+    marker = ':countries="'
+    start = text.find(marker)
+    if start < 0:
+        return {}
+    start += len(marker)
+    end = text.find('"', start)
+    if end < 0:
+        return {}
+
+    try:
+        countries = json.loads(html.unescape(text[start:end]))
+    except Exception as e:
+        _warn(f"SmsBower 提供商列表解析失败: {e}")
+        return {}
+
+    provider_map: dict[int, list[dict[str, Any]]] = {}
+    if isinstance(countries, list):
+        for country in countries:
+            if not isinstance(country, dict):
+                continue
+            try:
+                cid = int(country.get("id"))
+            except Exception:
+                continue
+            providers = []
+            for op in country.get("operators") or []:
+                if not isinstance(op, dict):
+                    continue
+                try:
+                    pid = int(op.get("id"))
+                except Exception:
+                    continue
+                name = html.unescape(re.sub(r"\s+", " ", str(op.get("name") or f"Provider {pid}")).strip())
+                providers.append({"id": pid, "name": name})
+            if providers:
+                provider_map[cid] = providers
+
+    _SMSBOWER_PROVIDER_MAP = provider_map
+    return _SMSBOWER_PROVIDER_MAP
+
+
 def _smsbower_prices_by_service(service_code: str, proxies: Any, *, force_refresh: bool = False,
                                 provider_ids: Optional[str] = None, except_provider_ids: Optional[str] = None) -> list[
     dict[str, Any]]:
@@ -389,9 +453,79 @@ def _smsbower_prices_by_service(service_code: str, proxies: Any, *, force_refres
             return [dict(x) for x in _SMSBOWER_PRICE_CACHE.get("items", [])]
 
     name_map = _get_country_names_map(proxies)
+    provider_map = _get_provider_map(proxies)
+
+    ok_v3, _, data_v3 = _smsbower_request("getPricesV3", proxies=proxies, params={"service": svc}, timeout=25)
+    if ok_v3 and isinstance(data_v3, dict):
+        by_country: dict[int, dict[str, Any]] = {}
+        for cid, entry in data_v3.items():
+            if not str(cid).isdigit() or int(cid) in _OPENAI_SMS_BLOCKED_COUNTRY_IDS:
+                continue
+            c_id = int(cid)
+            target = entry.get(svc) if isinstance(entry, dict) and svc in entry else entry
+            if not isinstance(target, dict):
+                continue
+            for provider_key, provider_entry in target.items():
+                if not isinstance(provider_entry, dict):
+                    continue
+                try:
+                    provider_id_raw = provider_entry.get("provider_id", provider_key)
+                    provider_id = int(provider_id_raw) if str(provider_id_raw).strip().isdigit() else 0
+                    if provider_id <= 0:
+                        continue
+                    if include_providers and provider_id not in include_providers:
+                        continue
+                    if provider_id in exclude_providers:
+                        continue
+                    c_cost = float(provider_entry.get("cost", provider_entry.get("price", -1)))
+                    c_count = int(provider_entry.get("count", 0))
+                    if c_count <= 0:
+                        continue
+                except Exception:
+                    continue
+
+                provider_name = f"Provider {provider_id}"
+                for provider in provider_map.get(c_id, []):
+                    if int(provider.get("id")) == provider_id:
+                        provider_name = str(provider.get("name") or provider_name)
+                        break
+
+                row = by_country.setdefault(c_id, {
+                    "country": c_id,
+                    "name": name_map.get(c_id, f"未知国家({c_id})"),
+                    "provider_id": 0,
+                    "provider": "",
+                    "cost": c_cost,
+                    "count": 0,
+                    "providers": [],
+                })
+                row["cost"] = min(float(row.get("cost", c_cost)), c_cost)
+                row["count"] = int(row.get("count", 0)) + c_count
+                row["providers"].append({
+                    "id": provider_id,
+                    "name": provider_name,
+                    "cost": c_cost,
+                    "count": c_count,
+                })
+
+        rows = list(by_country.values())
+        if rows:
+            for row in rows:
+                row["providers"].sort(key=lambda p: (p.get("cost", 999), -int(p.get("count", 0)), p.get("id", 0)))
+                if len(row["providers"]) == 1:
+                    provider = row["providers"][0]
+                    provider_id = int(provider.get("id") or 0)
+                    if provider_id > 0:
+                        row["provider_id"] = provider_id
+                        row["provider"] = str(provider_id)
+            rows.sort(key=lambda x: (x.get("cost", 999), -x.get("count", 0), x.get("country", 9999)))
+            with _SMSBOWER_PRICE_CACHE_LOCK:
+                _SMSBOWER_PRICE_CACHE.update({"service": cache_key, "updated_at": now, "items": rows})
+            return rows
 
     ok, text, data = _smsbower_request("getPrices", proxies=proxies, params={"service": svc})
     rows = []
+    raw_rows = []
     if ok and isinstance(data, dict):
         for cid, entry in data.items():
             if not str(cid).isdigit() or int(cid) in _OPENAI_SMS_BLOCKED_COUNTRY_IDS:
@@ -422,7 +556,7 @@ def _smsbower_prices_by_service(service_code: str, proxies: Any, *, force_refres
                     c_count = int(provider_entry.get("count", 0))
 
                     if c_count > 0:
-                        rows.append({
+                        raw_rows.append({
                             "country": c_id,
                             "name": name_map.get(c_id, f"未知国家({c_id})"),
                             "provider_id": provider_id,
@@ -432,6 +566,30 @@ def _smsbower_prices_by_service(service_code: str, proxies: Any, *, force_refres
                         })
                 except:
                     continue
+
+    for row in raw_rows:
+        c_id = int(row["country"])
+        providers = []
+        for provider in provider_map.get(c_id, []):
+            pid = int(provider.get("id"))
+            if include_providers and pid not in include_providers:
+                continue
+            if pid in exclude_providers:
+                continue
+            providers.append({
+                "id": pid,
+                "name": provider.get("name"),
+                "cost": None,
+                "count": None,
+            })
+        row["providers"] = providers
+        if len(providers) == 1:
+            provider = providers[0]
+            provider_id = int(provider.get("id") or 0)
+            if provider_id > 0:
+                row["provider_id"] = provider_id
+                row["provider"] = str(provider_id)
+        rows.append(row)
 
     if rows:
         rows.sort(key=lambda x: (x.get("cost", 999), -x.get("count", 0), x.get("country", 9999), x.get("provider_id", 0)))
